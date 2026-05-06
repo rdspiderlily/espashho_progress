@@ -39,6 +39,7 @@ export default function SpaceCustomerProfile() {
   // Profile Data States
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
 
   // Modal Visibility States
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
@@ -71,9 +72,32 @@ export default function SpaceCustomerProfile() {
         const userData = userDoc.data();
         const personalDetails = userData.personalDetails || {};
 
-        // Prefill only first and last name
+        // Prefill ALL fields
         setFirstName(personalDetails.firstName || "");
         setLastName(personalDetails.lastName || "");
+        setUsername(userData.username || "");
+
+        // Prefill date of birth
+        if (
+          personalDetails.dateOfBirth &&
+          personalDetails.dateOfBirth !== "Date of Birth"
+        ) {
+          setDobText(personalDetails.dateOfBirth);
+          const parsedDate = new Date(personalDetails.dateOfBirth);
+          if (!isNaN(parsedDate.getTime())) {
+            setDate(parsedDate);
+          }
+        }
+
+        // Prefill sex
+        if (personalDetails.sex) {
+          setSex(personalDetails.sex);
+        }
+
+        // Prefill phone number
+        if (personalDetails.phoneNumber) {
+          setPhoneNumber(personalDetails.phoneNumber);
+        }
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -184,6 +208,8 @@ export default function SpaceCustomerProfile() {
             placeholder="Username"
             placeholderTextColor="rgba(9, 136, 238, 0.6)"
             style={styles.input}
+            value={username}
+            onChangeText={setUsername}
           />
 
           <View style={styles.inputContainer}>
