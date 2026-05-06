@@ -7,7 +7,9 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
-  Modal,
+  KeyboardAvoidingView,
+  Modal, // ADDED
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +27,7 @@ export default function SpaceCustomerProfile() {
   const router = useRouter();
   const phoneInput = useRef<PhoneInput>(null);
   const auth = getAuth();
+  const scrollViewRef = useRef<ScrollView>(null); // ADDED
 
   // --- STATES ---
   const [userId, setUserId] = useState(null);
@@ -123,187 +126,207 @@ export default function SpaceCustomerProfile() {
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+    >
+      <View style={styles.container}>
+        <ScrollView
+          ref={scrollViewRef}  // ADDED
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"  // ADDED
+        >
+          <Text style={styles.headerTitle}>Edit Profile</Text>
 
-        <View style={styles.form}>
-          <TextInput
-            placeholder="First Name"
-            placeholderTextColor="rgba(9, 136, 238, 0.6)"
-            style={styles.input}
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            placeholder="Last Name"
-            placeholderTextColor="rgba(9, 136, 238, 0.6)"
-            style={styles.input}
-            value={lastName}
-            onChangeText={setLastName}
-          />
-
-          <TouchableOpacity
-            style={styles.inputContainer}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text
-              style={{
-                flex: 1,
-                color:
-                  dobText === "Date of Birth"
-                    ? "rgba(9, 136, 238, 0.6)"
-                    : "#0988EE",
-                fontFamily: "Inter_400Regular",
-              }}
-            >
-              {dobText}
-            </Text>
-            <Ionicons name="calendar-outline" size={20} color="#0988EE" />
-          </TouchableOpacity>
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display="default"
-              onChange={onChangeDate}
-            />
-          )}
-
-          <Dropdown
-            style={styles.dropdown}
-            placeholderStyle={styles.placeholderStyle}
-            selectedTextStyle={styles.selectedTextStyle}
-            data={sexData}
-            labelField="label"
-            valueField="value"
-            placeholder="Sex at Birth"
-            value={sex}
-            onChange={(item) => setSex(item.value)}
-            renderRightIcon={() => (
-              <Ionicons name="chevron-down" size={20} color="#0988EE" />
-            )}
-          />
-
-          <PhoneInput
-            ref={phoneInput}
-            defaultValue={phoneNumber}
-            defaultCode="PH"
-            layout="first"
-            onChangeFormattedText={(text) => setPhoneNumber(text)}
-            containerStyle={styles.phoneContainer}
-            textContainerStyle={styles.phoneTextContainer}
-            codeTextStyle={{ color: "#0988EE", fontFamily: "Inter_400Regular" }}
-            textInputStyle={{
-              color: "#0988EE",
-              fontFamily: "Inter_400Regular",
-              height: 45,
-            }}
-          />
-
-          <TextInput
-            placeholder="Username"
-            placeholderTextColor="rgba(9, 136, 238, 0.6)"
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-          />
-
-          <View style={styles.inputContainer}>
+          <View style={styles.form}>
             <TextInput
-              placeholder="Password"
-              secureTextEntry={!passwordVisible}
+              placeholder="First Name"
               placeholderTextColor="rgba(9, 136, 238, 0.6)"
-              style={styles.flexInput}
+              style={styles.input}
+              value={firstName}
+              onChangeText={setFirstName}
             />
-            <TouchableOpacity
-              onPress={() => setPasswordVisible(!passwordVisible)}
-            >
-              <Ionicons
-                name={passwordVisible ? "eye-outline" : "eye-off-outline"}
-                size={20}
-                color="#0988EE"
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Trigger Save Modal */}
-          <TouchableOpacity
-            style={styles.confirmButton}
-            onPress={() => setSaveModalVisible(true)}
-          >
-            <Text style={styles.confirmText}>Confirm Details</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={() => setLogoutModalVisible(true)}
-          >
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* --- MODAL: SAVE SUCCESS --- */}
-      <Modal animationType="fade" transparent={true} visible={saveModalVisible}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Ionicons
-              name="checkmark-circle-outline"
-              size={60}
-              color="#28a745"
+            <TextInput
+              placeholder="Last Name"
+              placeholderTextColor="rgba(9, 136, 238, 0.6)"
+              style={styles.input}
+              value={lastName}
+              onChangeText={setLastName}
             />
-            <Text style={styles.modalTitle}>Profile Saved!</Text>
-            <Text style={styles.modalSubTitle}>
-              Your information has been successfully updated.
-            </Text>
-            <TouchableOpacity
-              style={[styles.modalBtn, styles.saveConfirmBtn]}
-              onPress={() => setSaveModalVisible(false)}
-            >
-              <Text style={styles.confirmBtnText}>Dismiss</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      {/* --- MODAL: LOGOUT CONFIRM --- */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={logoutModalVisible}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Ionicons name="help-circle-outline" size={60} color="#0988EE" />
-            <Text style={styles.modalTitle}>Log Out?</Text>
-            <Text style={styles.modalSubTitle}>
-              Are you sure you want to logout? Any unsaved changes will be lost.
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.cancelBtn]}
-                onPress={() => setLogoutModalVisible(false)}
-              >
-                <Text style={styles.cancelBtnText}>No</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.logoutConfirmBtn]}
-                onPress={() => {
-                  setLogoutModalVisible(false);
-                  router.replace("/");
+            <TouchableOpacity
+              style={styles.inputContainer}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text
+                style={{
+                  flex: 1,
+                  color:
+                    dobText === "Date of Birth"
+                      ? "rgba(9, 136, 238, 0.6)"
+                      : "#0988EE",
+                  fontFamily: "Inter_400Regular",
                 }}
               >
-                <Text style={styles.confirmBtnText}>Yes</Text>
+                {dobText}
+              </Text>
+              <Ionicons name="calendar-outline" size={20} color="#0988EE" />
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display="default"
+                onChange={onChangeDate}
+              />
+            )}
+
+            <Dropdown
+              style={styles.dropdown}
+              placeholderStyle={styles.placeholderStyle}
+              selectedTextStyle={styles.selectedTextStyle}
+              data={sexData}
+              labelField="label"
+              valueField="value"
+              placeholder="Sex at Birth"
+              value={sex}
+              onChange={(item) => setSex(item.value)}
+              renderRightIcon={() => (
+                <Ionicons name="chevron-down" size={20} color="#0988EE" />
+              )}
+            />
+
+            {/* MODIFIED PhoneInput */}
+            <PhoneInput
+              ref={phoneInput}
+              defaultValue={phoneNumber}
+              defaultCode="PH"
+              layout="first"
+              onChangeFormattedText={(text) => setPhoneNumber(text)}
+              containerStyle={styles.phoneContainer}
+              textContainerStyle={styles.phoneTextContainer}
+              codeTextStyle={{ color: "#0988EE", fontFamily: "Inter_400Regular" }}
+              textInputStyle={{
+                color: "#0988EE",
+                fontFamily: "Inter_400Regular",
+                height: 45,
+                textAlign: "left",  // ADDED
+              }}
+              textInputProps={{  // ADDED - for autoscroll
+                onFocus: () => {
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollTo({ 
+                      y: 650, 
+                      animated: true 
+                    });
+                  }, 100);
+                },
+              }}
+            />
+
+            <TextInput
+              placeholder="Username"
+              placeholderTextColor="rgba(9, 136, 238, 0.6)"
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+            />
+
+            <View style={styles.inputContainer}>
+              <TextInput
+                placeholder="Password"
+                secureTextEntry={!passwordVisible}
+                placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                style={styles.flexInput}
+              />
+              <TouchableOpacity
+                onPress={() => setPasswordVisible(!passwordVisible)}
+              >
+                <Ionicons
+                  name={passwordVisible ? "eye-outline" : "eye-off-outline"}
+                  size={20}
+                  color="#0988EE"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Trigger Save Modal */}
+            <TouchableOpacity
+              style={styles.confirmButton}
+              onPress={() => setSaveModalVisible(true)}
+            >
+              <Text style={styles.confirmText}>Confirm Details</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() => setLogoutModalVisible(true)}
+            >
+              <Text style={styles.logoutText}>Log Out</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        {/* --- MODAL: SAVE SUCCESS --- */}
+        <Modal animationType="fade" transparent={true} visible={saveModalVisible}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={60}
+                color="#28a745"
+              />
+              <Text style={styles.modalTitle}>Profile Saved!</Text>
+              <Text style={styles.modalSubTitle}>
+                Your information has been successfully updated.
+              </Text>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.saveConfirmBtn]}
+                onPress={() => setSaveModalVisible(false)}
+              >
+                <Text style={styles.confirmBtnText}>Dismiss</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+
+        {/* --- MODAL: LOGOUT CONFIRM --- */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={logoutModalVisible}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Ionicons name="help-circle-outline" size={60} color="#0988EE" />
+              <Text style={styles.modalTitle}>Log Out?</Text>
+              <Text style={styles.modalSubTitle}>
+                Are you sure you want to logout? Any unsaved changes will be lost.
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.cancelBtn]}
+                  onPress={() => setLogoutModalVisible(false)}
+                >
+                  <Text style={styles.cancelBtnText}>No</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.logoutConfirmBtn]}
+                  onPress={() => {
+                    setLogoutModalVisible(false);
+                    router.replace("/");
+                  }}
+                >
+                  <Text style={styles.confirmBtnText}>Yes</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -382,6 +405,7 @@ const styles = StyleSheet.create({
     color: "#0988EE",
     fontFamily: "Inter_400Regular",
   },
+  // --- PHONE INPUT STYLES - MODIFIED ---
   phoneContainer: {
     width: "100%",
     height: 55,
@@ -390,11 +414,12 @@ const styles = StyleSheet.create({
     borderColor: "#0988EE",
     marginBottom: 15,
     backgroundColor: "#FFF",
-    overflow: "hidden",
+    // REMOVED overflow: "hidden"
   },
   phoneTextContainer: {
     backgroundColor: "#FFF",
     paddingVertical: 0,
+    flex: 1,  // ADDED
   },
 
   // --- BUTTONS ---
