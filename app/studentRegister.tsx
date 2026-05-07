@@ -10,7 +10,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { Dropdown } from "react-native-element-dropdown";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 // CHANGED: Using @sesamsolutions/phone-input instead of react-native-phone-number-input
 import PhoneInput from "@sesamsolutions/phone-input";
 import { auth, db } from "../firebaseConfig";
@@ -27,7 +27,7 @@ const { width } = Dimensions.get("window");
 export default function StudentRegister() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
 
   // States for interactive fields
   const [date, setDate] = useState(new Date());
@@ -292,7 +292,7 @@ export default function StudentRegister() {
           lastName: lastName.trim(),
           dateOfBirth: dobText,
           sex: sex,
-          phoneNumber: phoneNumber, // Now stores clean +639XXXXXXXXX format
+          phoneNumber: phoneNumber,
         },
         createdAt: new Date().toISOString(),
         userType: "student",
@@ -339,8 +339,8 @@ export default function StudentRegister() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       <View style={styles.container}>
         {/* Progress Bar */}
@@ -353,12 +353,14 @@ export default function StudentRegister() {
           />
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           bounces={false}
+          enableOnAndroid={true}
+          extraScrollHeight={100}
         >
           {step < 3 && (
             <TouchableOpacity
@@ -455,12 +457,13 @@ export default function StudentRegister() {
                 )}
               />
 
-              {/* Phone Input - UPDATED to use @sesamsolutions/phone-input */}
+              {/* Phone Input */}
               <PhoneInput
                 initialCountry="PH"
+                value={phoneNumber}
                 onChange={(data) => {
                   if (data.isValid) {
-                    setPhoneNumber(data.e164); // Returns +639XXXXXXXXX format
+                    setPhoneNumber(data.e164);
                     setIsPhoneValid(true);
                   } else {
                     setIsPhoneValid(false);
@@ -640,7 +643,7 @@ export default function StudentRegister() {
               </TouchableOpacity>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
     </KeyboardAvoidingView>
   );

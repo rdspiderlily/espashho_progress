@@ -18,7 +18,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -26,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { Dropdown } from "react-native-element-dropdown";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { db } from "../firebaseConfig";
 
 const { width } = Dimensions.get("window");
@@ -33,7 +33,7 @@ const { width } = Dimensions.get("window");
 export default function SpaceCustomerProfile() {
   const router = useRouter();
   const auth = getAuth();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
 
   // --- STATES ---
   const [userId, setUserId] = useState(null);
@@ -162,16 +162,31 @@ export default function SpaceCustomerProfile() {
           }
         }
 
-        // Prefill date of birth
+        // Prefill date of birth - FIXED: Properly parse date for the picker
         if (
           personalDetails.dateOfBirth &&
           personalDetails.dateOfBirth !== "Date of Birth"
         ) {
           fetchedDobText = personalDetails.dateOfBirth;
           setDobText(fetchedDobText);
-          const parsedDate = new Date(personalDetails.dateOfBirth);
-          if (!isNaN(parsedDate.getTime())) {
-            setDate(parsedDate);
+          
+          // Parse the date correctly for the date picker
+          const dateParts = personalDetails.dateOfBirth.split('/');
+          if (dateParts.length === 3) {
+            // Assuming format is MM/DD/YYYY or M/D/YYYY
+            const month = parseInt(dateParts[0], 10) - 1; // Months are 0-indexed in JS
+            const day = parseInt(dateParts[1], 10);
+            const year = parseInt(dateParts[2], 10);
+            const parsedDate = new Date(year, month, day);
+            if (!isNaN(parsedDate.getTime())) {
+              setDate(parsedDate);
+            }
+          } else {
+            // Fallback to original parsing
+            const parsedDate = new Date(personalDetails.dateOfBirth);
+            if (!isNaN(parsedDate.getTime())) {
+              setDate(parsedDate);
+            }
           }
         }
 
@@ -610,16 +625,18 @@ export default function SpaceCustomerProfile() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-    >
+  style={{ flex: 1 }}
+  behavior={Platform.OS === "ios" ? "padding" : undefined}
+  keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+  >
       <View style={styles.container}>
-        <ScrollView
+        <KeyboardAwareScrollView
           ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          enableOnAndroid={true}
+          extraScrollHeight={100}
         >
           <Text style={styles.headerTitle}>Edit Profile</Text>
 
@@ -687,7 +704,7 @@ export default function SpaceCustomerProfile() {
               value={phoneNumber}
               onChange={(data) => {
                 if (data.isValid) {
-                  setPhoneNumber(data.e164); // Returns +639XXXXXXXXX format
+                  setPhoneNumber(data.e164);
                   setIsPhoneValid(true);
                 } else {
                   setIsPhoneValid(false);
@@ -722,7 +739,6 @@ export default function SpaceCustomerProfile() {
               )}
             </View>
 
-            {/* Show username error message inline */}
             {usernameError ? (
               <Text style={styles.errorText}>{usernameError}</Text>
             ) : isUsernameValid && username ? (
@@ -832,12 +848,10 @@ export default function SpaceCustomerProfile() {
                   )}
                 </View>
 
-                {/* Show same password warning message */}
                 {samePasswordWarning ? (
                   <Text style={styles.warningText}>{samePasswordWarning}</Text>
                 ) : null}
 
-                {/* Show new password error message inline */}
                 {newPasswordError ? (
                   <Text style={styles.errorText}>{newPasswordError}</Text>
                 ) : isNewPasswordValid &&
@@ -885,7 +899,6 @@ export default function SpaceCustomerProfile() {
                     )}
                 </View>
 
-                {/* Show confirm password error message inline */}
                 {confirmPasswordError ? (
                   <Text style={styles.errorText}>{confirmPasswordError}</Text>
                 ) : confirmNewPassword &&
@@ -901,7 +914,6 @@ export default function SpaceCustomerProfile() {
               Leave blank to keep current password
             </Text>
 
-            {/* ADDED: No changes inline message */}
             {noChangesMessage ? (
               <Text style={styles.noChangesText}>{noChangesMessage}</Text>
             ) : null}
@@ -920,7 +932,7 @@ export default function SpaceCustomerProfile() {
               <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <Modal
           animationType="fade"
