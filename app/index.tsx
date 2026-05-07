@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -63,7 +63,7 @@ export default function LoginScreen() {
 
     setLoading(true);
 
-    const trimmedUsername = username.trim(); // This is actually username now
+    const trimmedUsername = username.trim();
     const trimmedPassword = password.trim();
 
     try {
@@ -84,8 +84,19 @@ export default function LoginScreen() {
         return;
       }
 
+      // Step 1.5: Check if the username is active (not marked as inactive from username change)
+      const usernameData = usernameDoc.data();
+      if (usernameData.isActive === false) {
+        Alert.alert(
+          "Login Failed",
+          "This username has been changed. Please use your new username.",
+        );
+        setLoading(false);
+        return;
+      }
+
       // Step 2: Get the user ID from the username document
-      const userId = usernameDoc.data().userId;
+      const userId = usernameData.userId;
 
       // Step 3: Get the user's email from their user document
       const userDocRef = doc(db, "users", userId);

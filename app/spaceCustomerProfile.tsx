@@ -1,14 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import PhoneInput from "@sesamsolutions/phone-input";
 import { useRouter } from "expo-router";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import React, { useEffect, useRef, useState } from "react";
+import {
+  EmailAuthProvider,
+  getAuth,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  updatePassword,
+} from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   KeyboardAvoidingView,
-  Modal, // ADDED
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,16 +26,14 @@ import {
   View,
 } from "react-native";
 import { Dropdown } from "react-native-element-dropdown";
-import PhoneInput from "react-native-phone-number-input";
 import { db } from "../firebaseConfig";
 
 const { width } = Dimensions.get("window");
 
 export default function SpaceCustomerProfile() {
   const router = useRouter();
-  const phoneInput = useRef<PhoneInput>(null);
   const auth = getAuth();
-  const scrollViewRef = useRef<ScrollView>(null); // ADDED
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // --- STATES ---
   const [userId, setUserId] = useState(null);
@@ -37,7 +43,56 @@ export default function SpaceCustomerProfile() {
   const [dobText, setDobText] = useState("Date of Birth");
   const [sex, setSex] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [isPhoneValid, setIsPhoneValid] = useState(false);
+
+  // Password visibility states for the three password fields
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Password field values
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
+  // ADDED: State for current password validation (green checkmark / red X)
+  const [isCurrentPasswordValid, setIsCurrentPasswordValid] = useState(null);
+
+  // ADDED: State to show/hide new password fields
+  const [showPasswordChangeFields, setShowPasswordChangeFields] =
+    useState(false);
+
+  // ADDED: State for inline text feedback messages
+  const [currentPasswordFeedback, setCurrentPasswordFeedback] = useState("");
+
+  // ADDED: State for debounce timeout
+  const [checkTimeout, setCheckTimeout] = useState(null);
+
+  // ADDED: States for new password inline validation
+  const [newPasswordError, setNewPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [isNewPasswordValid, setIsNewPasswordValid] = useState(false);
+
+  // ADDED: State for same password warning
+  const [samePasswordWarning, setSamePasswordWarning] = useState("");
+
+  // ADDED: Inline validation states for username
+  const [usernameError, setUsernameError] = useState("");
+  const [isUsernameValid, setIsUsernameValid] = useState(false);
+
+  // ADDED: Store original values for change detection
+  const [originalValues, setOriginalValues] = useState({
+    firstName: "",
+    lastName: "",
+    username: "",
+    dobText: "",
+    sex: null,
+    phoneNumber: "",
+  });
+
+  // ADDED: State for "no changes" inline message
+  const [noChangesMessage, setNoChangesMessage] = useState("");
+  const [noChangesTimeout, setNoChangesTimeout] = useState(null);
 
   // Profile Data States
   const [firstName, setFirstName] = useState("");
@@ -57,6 +112,7 @@ export default function SpaceCustomerProfile() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        setUserId(user.uid);
         fetchUserData(user.uid);
       } else {
         router.replace("/");
@@ -76,16 +132,43 @@ export default function SpaceCustomerProfile() {
         const personalDetails = userData.personalDetails || {};
 
         // Prefill ALL fields
-        setFirstName(personalDetails.firstName || "");
-        setLastName(personalDetails.lastName || "");
-        setUsername(userData.username || "");
+        const fetchedFirstName = personalDetails.firstName || "";
+        const fetchedLastName = personalDetails.lastName || "";
+        const fetchedUsername = userData.username || "";
+        let fetchedDobText = "Date of Birth";
+        const fetchedSex = personalDetails.sex || null;
+        let fetchedPhoneNumber = personalDetails.phoneNumber || "";
+
+        setFirstName(fetchedFirstName);
+        setLastName(fetchedLastName);
+        setUsername(fetchedUsername);
+
+        // Validate the fetched username for display
+        if (fetchedUsername) {
+          const usernameHasLetter = /[a-zA-Z]/.test(fetchedUsername);
+          const usernameHasNumber = /[0-9]/.test(fetchedUsername);
+          if (
+            usernameHasLetter &&
+            usernameHasNumber &&
+            fetchedUsername.length <= 20
+          ) {
+            setIsUsernameValid(true);
+            setUsernameError("");
+          } else {
+            setIsUsernameValid(false);
+            setUsernameError(
+              "❌ Username must contain at least 1 letter and 1 number",
+            );
+          }
+        }
 
         // Prefill date of birth
         if (
           personalDetails.dateOfBirth &&
           personalDetails.dateOfBirth !== "Date of Birth"
         ) {
-          setDobText(personalDetails.dateOfBirth);
+          fetchedDobText = personalDetails.dateOfBirth;
+          setDobText(fetchedDobText);
           const parsedDate = new Date(personalDetails.dateOfBirth);
           if (!isNaN(parsedDate.getTime())) {
             setDate(parsedDate);
@@ -97,10 +180,31 @@ export default function SpaceCustomerProfile() {
           setSex(personalDetails.sex);
         }
 
-        // Prefill phone number
-        if (personalDetails.phoneNumber) {
-          setPhoneNumber(personalDetails.phoneNumber);
+        // SIMPLIFIED: Prefill phone number - clean any corrupted format
+        if (fetchedPhoneNumber) {
+          // Extract only digits, then format as E.164
+          const digits = fetchedPhoneNumber.match(/\d/g)?.join("");
+          if (digits && digits.length >= 10) {
+            // Take last 10-13 digits and add +63
+            const lastDigits = digits.slice(-10);
+            const cleanedPhone = `+63${lastDigits}`;
+            setPhoneNumber(cleanedPhone);
+            fetchedPhoneNumber = cleanedPhone;
+            setIsPhoneValid(true);
+          } else {
+            setPhoneNumber(fetchedPhoneNumber);
+          }
         }
+
+        // Store original values for change detection
+        setOriginalValues({
+          firstName: fetchedFirstName,
+          lastName: fetchedLastName,
+          username: fetchedUsername,
+          dobText: fetchedDobText,
+          sex: fetchedSex,
+          phoneNumber: fetchedPhoneNumber,
+        });
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -109,11 +213,390 @@ export default function SpaceCustomerProfile() {
     }
   };
 
+  // ADDED: Function to validate username inline (shows errors while typing)
+  const validateUsername = (user: string) => {
+    if (!user) {
+      setUsernameError("");
+      setIsUsernameValid(false);
+      return false;
+    }
+
+    const usernameHasLetter = /[a-zA-Z]/.test(user);
+    const usernameHasNumber = /[0-9]/.test(user);
+
+    if (!usernameHasLetter || !usernameHasNumber) {
+      setUsernameError(
+        "❌ Username must contain at least 1 letter and 1 number",
+      );
+      setIsUsernameValid(false);
+      return false;
+    }
+
+    if (user.length > 20) {
+      setUsernameError("❌ Username must be 20 characters or less");
+      setIsUsernameValid(false);
+      return false;
+    }
+
+    setUsernameError("");
+    setIsUsernameValid(true);
+    return true;
+  };
+
+  // ADDED: Function to check if any profile fields have changed
+  const hasProfileChanges = () => {
+    return (
+      firstName.trim() !== originalValues.firstName ||
+      lastName.trim() !== originalValues.lastName ||
+      username.trim() !== originalValues.username ||
+      dobText !== originalValues.dobText ||
+      sex !== originalValues.sex ||
+      phoneNumber !== originalValues.phoneNumber
+    );
+  };
+
+  // ADDED: Function to check if password is being changed
+  const isPasswordBeingChanged = () => {
+    return currentPassword || newPassword || confirmNewPassword;
+  };
+
+  // Date picker onChange - only updates when user presses OK
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
-    if (selectedDate) {
-      setDate(selectedDate);
-      setDobText(selectedDate.toLocaleDateString());
+
+    if (Platform.OS === "android") {
+      if (event.type === "set" && selectedDate) {
+        setDate(selectedDate);
+        setDobText(selectedDate.toLocaleDateString());
+      }
+    } else {
+      if (selectedDate) {
+        setDate(selectedDate);
+        setDobText(selectedDate.toLocaleDateString());
+      }
+    }
+  };
+
+  // MODIFIED: Function to validate new password inline (shows errors while typing)
+  const validateNewPassword = (password: string) => {
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$/;
+
+    // Check if new password is the same as current password
+    if (password && currentPassword && password === currentPassword) {
+      setSamePasswordWarning(
+        "⚠️ New password cannot be the same as your current password. Please choose a different password.",
+      );
+      setIsNewPasswordValid(false);
+      setNewPasswordError("");
+      return false;
+    } else {
+      setSamePasswordWarning("");
+    }
+
+    if (!password) {
+      setNewPasswordError("");
+      setIsNewPasswordValid(false);
+      return false;
+    }
+
+    if (password.length < 8) {
+      setNewPasswordError("❌ Password must be at least 8 characters");
+      setIsNewPasswordValid(false);
+      return false;
+    }
+
+    if (password.length > 20) {
+      setNewPasswordError("❌ Password must be no more than 20 characters");
+      setIsNewPasswordValid(false);
+      return false;
+    }
+
+    if (!passwordRegex.test(password)) {
+      setNewPasswordError(
+        "❌ Password must contain: 1 uppercase, 1 lowercase, 1 number, and 1 special character (@$!%*?&)",
+      );
+      setIsNewPasswordValid(false);
+      return false;
+    }
+
+    setNewPasswordError("");
+    setIsNewPasswordValid(true);
+    return true;
+  };
+
+  // ADDED: Function to validate confirm password inline
+  const validateConfirmPassword = (confirm: string) => {
+    if (!confirm) {
+      setConfirmPasswordError("");
+      return false;
+    }
+
+    if (confirm !== newPassword) {
+      setConfirmPasswordError("❌ Passwords do not match");
+      return false;
+    }
+
+    setConfirmPasswordError("");
+    return true;
+  };
+
+  // MODIFIED: Function to check current password with debounce (checks while typing)
+  const checkCurrentPassword = async (password: string) => {
+    if (!password) {
+      setIsCurrentPasswordValid(null);
+      setCurrentPasswordFeedback("");
+      setShowPasswordChangeFields(false);
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setNewPasswordError("");
+      setConfirmPasswordError("");
+      setSamePasswordWarning("");
+      return;
+    }
+
+    try {
+      const user = auth.currentUser;
+      if (user && user.email) {
+        const credential = EmailAuthProvider.credential(user.email, password);
+        await reauthenticateWithCredential(user, credential);
+        setIsCurrentPasswordValid(true);
+        setCurrentPasswordFeedback(
+          "✓ Current password is correct. You can now set a new password below.",
+        );
+        setShowPasswordChangeFields(true);
+      }
+    } catch (error) {
+      setIsCurrentPasswordValid(false);
+      setCurrentPasswordFeedback(
+        "✗ Current password is incorrect. Please try again.",
+      );
+      setShowPasswordChangeFields(false);
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setNewPasswordError("");
+      setConfirmPasswordError("");
+      setSamePasswordWarning("");
+    }
+  };
+
+  // MODIFIED: Function to handle password update - uses inline validation results, NO alert on success
+  const handlePasswordUpdate = async () => {
+    const isChangingPassword =
+      currentPassword || newPassword || confirmNewPassword;
+
+    if (!isChangingPassword) {
+      return true;
+    }
+
+    if (!currentPassword) {
+      Alert.alert("Error", "Please enter your current password");
+      return false;
+    }
+
+    if (!newPassword) {
+      Alert.alert("Error", "Please enter a new password");
+      return false;
+    }
+
+    if (!confirmNewPassword) {
+      Alert.alert("Error", "Please confirm your new password");
+      return false;
+    }
+
+    if (isCurrentPasswordValid !== true) {
+      Alert.alert(
+        "Error",
+        "Current password is incorrect. Please check and try again.",
+      );
+      return false;
+    }
+
+    // Check if new password is the same as current password
+    if (currentPassword === newPassword) {
+      Alert.alert(
+        "Error",
+        "New password must be different from your current password",
+      );
+      return false;
+    }
+
+    if (!isNewPasswordValid) {
+      Alert.alert(
+        "Error",
+        "Please fix the new password errors above before saving.",
+      );
+      return false;
+    }
+
+    if (confirmNewPassword !== newPassword) {
+      Alert.alert(
+        "Error",
+        "Please fix the confirm password error above before saving.",
+      );
+      return false;
+    }
+
+    try {
+      const user = auth.currentUser;
+      if (user && user.email) {
+        const credential = EmailAuthProvider.credential(
+          user.email,
+          currentPassword,
+        );
+        await reauthenticateWithCredential(user, credential);
+        await updatePassword(user, newPassword);
+
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmNewPassword("");
+        setIsCurrentPasswordValid(null);
+        setCurrentPasswordFeedback("");
+        setShowPasswordChangeFields(false);
+        setNewPasswordError("");
+        setConfirmPasswordError("");
+        setIsNewPasswordValid(false);
+        setSamePasswordWarning("");
+
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      if (error.code === "auth/wrong-password") {
+        Alert.alert(
+          "Error",
+          "Current password is incorrect. Please try again.",
+        );
+      } else if (error.code === "auth/too-many-requests") {
+        Alert.alert(
+          "Error",
+          "Too many failed attempts. Please try again later.",
+        );
+      } else {
+        Alert.alert("Error", "Failed to update password. Please try again.");
+      }
+      return false;
+    }
+  };
+
+  // ADDED: Function to show "no changes" message that disappears after 5 seconds
+  const showNoChangesMessage = () => {
+    setNoChangesMessage("ℹ️ No changes detected - nothing to save");
+
+    if (noChangesTimeout) {
+      clearTimeout(noChangesTimeout);
+    }
+
+    const timeout = setTimeout(() => {
+      setNoChangesMessage("");
+    }, 5000);
+    setNoChangesTimeout(timeout);
+  };
+
+  // MODIFIED: Save profile changes to Firebase with change detection (UPDATED: marks old username as inactive instead of deleting)
+  const handleSaveProfile = async () => {
+    if (!userId) {
+      Alert.alert("Error", "User not logged in");
+      return;
+    }
+
+    // Validate username before saving
+    if (username && !isUsernameValid) {
+      Alert.alert(
+        "Invalid Username",
+        "Username must contain at least 1 letter and 1 number, and be 20 characters or less.",
+      );
+      return;
+    }
+
+    const profileChanged = hasProfileChanges();
+    const passwordChanging = isPasswordBeingChanged();
+
+    if (!profileChanged && !passwordChanging) {
+      showNoChangesMessage();
+      return;
+    }
+
+    // Validate phone number if it has changed
+    if (phoneNumber && !isPhoneValid) {
+      Alert.alert("Error", "Please enter a valid phone number");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      let passwordSuccess = true;
+      if (passwordChanging) {
+        passwordSuccess = await handlePasswordUpdate();
+      }
+
+      if (passwordSuccess === false) {
+        setLoading(false);
+        return;
+      }
+
+      if (profileChanged) {
+        // Store the old username before updating
+        const oldUsername = originalValues.username;
+        const newUsername = username.trim();
+
+        // Update user document
+        const userDocRef = doc(db, "users", userId);
+        const updatedData = {
+          username: newUsername,
+          personalDetails: {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            dateOfBirth: dobText,
+            sex: sex,
+            phoneNumber: phoneNumber,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+        await setDoc(userDocRef, updatedData, { merge: true });
+
+        // Handle username change - mark old username as inactive instead of deleting
+        if (oldUsername && oldUsername !== newUsername) {
+          const oldUsernameDocRef = doc(
+            db,
+            "usernames",
+            oldUsername.toLowerCase(),
+          );
+          await setDoc(oldUsernameDocRef, {
+            userId: "INACTIVE",
+            username: oldUsername,
+            isActive: false,
+          });
+        }
+
+        // Create/update the username document for the new username
+        const usernameDocRef = doc(db, "usernames", newUsername.toLowerCase());
+        await setDoc(
+          usernameDocRef,
+          { userId: userId, username: newUsername, isActive: true },
+          { merge: true },
+        );
+
+        setOriginalValues({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          username: newUsername,
+          dobText: dobText,
+          sex: sex,
+          phoneNumber: phoneNumber,
+        });
+      }
+
+      setSaveModalVisible(true);
+    } catch (error) {
+      console.error("Save error:", error);
+      Alert.alert(
+        "Save Failed",
+        "Could not save profile changes. Please try again.",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -126,17 +609,17 @@ export default function SpaceCustomerProfile() {
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }} 
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
       <View style={styles.container}>
         <ScrollView
-          ref={scrollViewRef}  // ADDED
+          ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"  // ADDED
+          keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.headerTitle}>Edit Profile</Text>
 
@@ -198,64 +681,234 @@ export default function SpaceCustomerProfile() {
               )}
             />
 
-            {/* MODIFIED PhoneInput */}
+            {/* Phone Input with proper E.164 format */}
             <PhoneInput
-              ref={phoneInput}
-              defaultValue={phoneNumber}
-              defaultCode="PH"
-              layout="first"
-              onChangeFormattedText={(text) => setPhoneNumber(text)}
-              containerStyle={styles.phoneContainer}
-              textContainerStyle={styles.phoneTextContainer}
-              codeTextStyle={{ color: "#0988EE", fontFamily: "Inter_400Regular" }}
-              textInputStyle={{
-                color: "#0988EE",
-                fontFamily: "Inter_400Regular",
-                height: 45,
-                textAlign: "left",  // ADDED
+              initialCountry="PH"
+              value={phoneNumber}
+              onChange={(data) => {
+                if (data.isValid) {
+                  setPhoneNumber(data.e164); // Returns +639XXXXXXXXX format
+                  setIsPhoneValid(true);
+                } else {
+                  setIsPhoneValid(false);
+                }
               }}
-              textInputProps={{  // ADDED - for autoscroll
-                onFocus: () => {
-                  setTimeout(() => {
-                    scrollViewRef.current?.scrollTo({ 
-                      y: 650, 
-                      animated: true 
-                    });
-                  }, 100);
-                },
-              }}
+              style={styles.phoneInputContainer}
+              textStyle={styles.phoneInputText}
+              flagStyle={styles.phoneFlag}
             />
 
-            <TextInput
-              placeholder="Username"
-              placeholderTextColor="rgba(9, 136, 238, 0.6)"
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-            />
-
+            {/* Username Field with inline validation */}
             <View style={styles.inputContainer}>
               <TextInput
-                placeholder="Password"
-                secureTextEntry={!passwordVisible}
+                placeholder="Username"
                 placeholderTextColor="rgba(9, 136, 238, 0.6)"
                 style={styles.flexInput}
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  validateUsername(text);
+                }}
+                autoCapitalize="none"
+                maxLength={20}
+              />
+              {isUsernameValid && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color="green"
+                  style={{ marginLeft: 8 }}
+                />
+              )}
+            </View>
+
+            {/* Show username error message inline */}
+            {usernameError ? (
+              <Text style={styles.errorText}>{usernameError}</Text>
+            ) : isUsernameValid && username ? (
+              <Text style={styles.successText}>✓ Username is valid!</Text>
+            ) : null}
+
+            {/* MODIFIED: Current Password Field with debounced auto-check */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                placeholder="Current Password"
+                secureTextEntry={!showCurrentPassword}
+                placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                style={styles.flexInput}
+                value={currentPassword}
+                onChangeText={(text) => {
+                  setCurrentPassword(text);
+                  setIsCurrentPasswordValid(null);
+                  setCurrentPasswordFeedback("");
+                  setShowPasswordChangeFields(false);
+                  setNewPassword("");
+                  setConfirmNewPassword("");
+                  setNewPasswordError("");
+                  setConfirmPasswordError("");
+                  setSamePasswordWarning("");
+
+                  if (checkTimeout) clearTimeout(checkTimeout);
+
+                  const timeout = setTimeout(() => {
+                    if (text) checkCurrentPassword(text);
+                  }, 500);
+                  setCheckTimeout(timeout);
+                }}
               />
               <TouchableOpacity
-                onPress={() => setPasswordVisible(!passwordVisible)}
+                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
               >
                 <Ionicons
-                  name={passwordVisible ? "eye-outline" : "eye-off-outline"}
+                  name={showCurrentPassword ? "eye-outline" : "eye-off-outline"}
                   size={20}
                   color="#0988EE"
                 />
               </TouchableOpacity>
+              {isCurrentPasswordValid === true && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color="green"
+                  style={{ marginLeft: 8 }}
+                />
+              )}
+              {isCurrentPasswordValid === false && (
+                <Ionicons
+                  name="close-circle"
+                  size={20}
+                  color="red"
+                  style={{ marginLeft: 8 }}
+                />
+              )}
             </View>
 
-            {/* Trigger Save Modal */}
+            {currentPasswordFeedback ? (
+              <Text
+                style={
+                  isCurrentPasswordValid === true
+                    ? styles.successText
+                    : styles.errorText
+                }
+              >
+                {currentPasswordFeedback}
+              </Text>
+            ) : null}
+
+            {/* Conditionally show New Password fields */}
+            {showPasswordChangeFields && (
+              <>
+                {/* New Password Field with inline validation */}
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="New Password"
+                    secureTextEntry={!showNewPassword}
+                    placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                    style={styles.flexInput}
+                    value={newPassword}
+                    onChangeText={(text) => {
+                      setNewPassword(text);
+                      validateNewPassword(text);
+                      if (confirmNewPassword)
+                        validateConfirmPassword(confirmNewPassword);
+                    }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    <Ionicons
+                      name={showNewPassword ? "eye-outline" : "eye-off-outline"}
+                      size={20}
+                      color="#0988EE"
+                    />
+                  </TouchableOpacity>
+                  {isNewPasswordValid && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="green"
+                      style={{ marginLeft: 8 }}
+                    />
+                  )}
+                </View>
+
+                {/* Show same password warning message */}
+                {samePasswordWarning ? (
+                  <Text style={styles.warningText}>{samePasswordWarning}</Text>
+                ) : null}
+
+                {/* Show new password error message inline */}
+                {newPasswordError ? (
+                  <Text style={styles.errorText}>{newPasswordError}</Text>
+                ) : isNewPasswordValid &&
+                  newPassword &&
+                  !samePasswordWarning ? (
+                  <Text style={styles.successText}>
+                    ✓ Password meets all requirements!
+                  </Text>
+                ) : null}
+
+                {/* Confirm New Password Field with inline validation */}
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="Confirm New Password"
+                    secureTextEntry={!showConfirmPassword}
+                    placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                    style={styles.flexInput}
+                    value={confirmNewPassword}
+                    onChangeText={(text) => {
+                      setConfirmNewPassword(text);
+                      validateConfirmPassword(text);
+                    }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    <Ionicons
+                      name={
+                        showConfirmPassword ? "eye-outline" : "eye-off-outline"
+                      }
+                      size={20}
+                      color="#0988EE"
+                    />
+                  </TouchableOpacity>
+                  {confirmNewPassword &&
+                    confirmNewPassword === newPassword &&
+                    isNewPasswordValid &&
+                    !samePasswordWarning && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="green"
+                        style={{ marginLeft: 8 }}
+                      />
+                    )}
+                </View>
+
+                {/* Show confirm password error message inline */}
+                {confirmPasswordError ? (
+                  <Text style={styles.errorText}>{confirmPasswordError}</Text>
+                ) : confirmNewPassword &&
+                  confirmNewPassword === newPassword &&
+                  newPassword &&
+                  !samePasswordWarning ? (
+                  <Text style={styles.successText}>✓ Passwords match!</Text>
+                ) : null}
+              </>
+            )}
+
+            <Text style={styles.passwordHint}>
+              Leave blank to keep current password
+            </Text>
+
+            {/* ADDED: No changes inline message */}
+            {noChangesMessage ? (
+              <Text style={styles.noChangesText}>{noChangesMessage}</Text>
+            ) : null}
+
             <TouchableOpacity
               style={styles.confirmButton}
-              onPress={() => setSaveModalVisible(true)}
+              onPress={handleSaveProfile}
             >
               <Text style={styles.confirmText}>Confirm Details</Text>
             </TouchableOpacity>
@@ -269,8 +922,11 @@ export default function SpaceCustomerProfile() {
           </View>
         </ScrollView>
 
-        {/* --- MODAL: SAVE SUCCESS --- */}
-        <Modal animationType="fade" transparent={true} visible={saveModalVisible}>
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={saveModalVisible}
+        >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Ionicons
@@ -292,7 +948,6 @@ export default function SpaceCustomerProfile() {
           </View>
         </Modal>
 
-        {/* --- MODAL: LOGOUT CONFIRM --- */}
         <Modal
           animationType="fade"
           transparent={true}
@@ -303,7 +958,8 @@ export default function SpaceCustomerProfile() {
               <Ionicons name="help-circle-outline" size={60} color="#0988EE" />
               <Text style={styles.modalTitle}>Log Out?</Text>
               <Text style={styles.modalSubTitle}>
-                Are you sure you want to logout? Any unsaved changes will be lost.
+                Are you sure you want to logout? Any unsaved changes will be
+                lost.
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -331,7 +987,6 @@ export default function SpaceCustomerProfile() {
 }
 
 const styles = StyleSheet.create({
-  // --- LAYOUT ---
   container: {
     flex: 1,
     backgroundColor: "#F0F7FF",
@@ -357,8 +1012,6 @@ const styles = StyleSheet.create({
   form: {
     width: "100%",
   },
-
-  // --- INPUTS ---
   input: {
     height: 55,
     borderWidth: 1,
@@ -405,24 +1058,32 @@ const styles = StyleSheet.create({
     color: "#0988EE",
     fontFamily: "Inter_400Regular",
   },
-  // --- PHONE INPUT STYLES - MODIFIED ---
-  phoneContainer: {
+  phoneInputContainer: {
     width: "100%",
     height: 55,
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#0988EE",
+    borderRadius: 12,
     marginBottom: 15,
     backgroundColor: "#FFF",
-    // REMOVED overflow: "hidden"
+    paddingHorizontal: 15,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  phoneTextContainer: {
-    backgroundColor: "#FFF",
-    paddingVertical: 0,
-    flex: 1,  // ADDED
+  phoneInputText: {
+    color: "#0988EE",
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    textAlignVertical: "center",
+    textAlign: "left",
+    padding: 0,
+    margin: 0,
+    height: "100%",
   },
-
-  // --- BUTTONS ---
+  phoneFlag: {
+    width: 35,
+    height: 35,
+  },
   confirmButton: {
     backgroundColor: "#0988EE",
     height: 55,
@@ -445,8 +1106,47 @@ const styles = StyleSheet.create({
     color: "#FF4D4D",
     fontSize: 16,
   },
-
-  // --- MODAL STYLES ---
+  passwordHint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "rgba(9, 136, 238, 0.6)",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  errorText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#FF4D4D",
+    marginTop: -10,
+    marginBottom: 15,
+    marginLeft: 5,
+  },
+  successText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#28a745",
+    marginTop: -10,
+    marginBottom: 15,
+    marginLeft: 5,
+  },
+  warningText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#FF8C00",
+    marginTop: -10,
+    marginBottom: 15,
+    marginLeft: 5,
+  },
+  noChangesText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: "#FF8C00",
+    marginBottom: 15,
+    textAlign: "center",
+    backgroundColor: "#FFF3E0",
+    padding: 10,
+    borderRadius: 8,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

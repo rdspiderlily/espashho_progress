@@ -3,7 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -18,7 +18,8 @@ import {
   View,
 } from "react-native";
 import { Dropdown } from "react-native-element-dropdown";
-import PhoneInput from "react-native-phone-number-input";
+// CHANGED: Using @sesamsolutions/phone-input instead of react-native-phone-number-input
+import PhoneInput from "@sesamsolutions/phone-input";
 import { auth, db } from "../firebaseConfig";
 
 const { width } = Dimensions.get("window");
@@ -26,7 +27,6 @@ const { width } = Dimensions.get("window");
 export default function StudentRegister() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const phoneInput = useRef<PhoneInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // States for interactive fields
@@ -35,8 +35,20 @@ export default function StudentRegister() {
   const [dobText, setDobText] = useState("Date of Birth");
   const [sex, setSex] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [passwordVisible, setPasswordVisible] = useState(false);
-  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [isPhoneValid, setIsPhoneValid] = useState(false);
+
+  // Password visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // ADDED: Inline validation states for password fields
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [isPasswordValid, setIsPasswordValid] = useState(false);
+
+  // ADDED: Inline validation states for username
+  const [usernameError, setUsernameError] = useState("");
+  const [isUsernameValid, setIsUsernameValid] = useState(false);
 
   // Personal Details States
   const [universityName, setUniversityName] = useState("");
@@ -56,33 +68,111 @@ export default function StudentRegister() {
     { label: "Female", value: "female" },
   ];
 
+  // FIXED: Date picker - only updates when user presses OK
   const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === "ios");
-    if (selectedDate) {
-      setDate(selectedDate);
-      setDobText(selectedDate.toLocaleDateString());
+    setShowDatePicker(false);
+
+    if (Platform.OS === "android") {
+      if (event.type === "set" && selectedDate) {
+        setDate(selectedDate);
+        setDobText(selectedDate.toLocaleDateString());
+      }
+    } else {
+      if (selectedDate) {
+        setDate(selectedDate);
+        setDobText(selectedDate.toLocaleDateString());
+      }
     }
   };
 
-  // Validation Functions
+  // ADDED: Function to validate username inline (shows errors while typing)
+  const validateUsername = (user: string) => {
+    if (!user) {
+      setUsernameError("");
+      setIsUsernameValid(false);
+      return false;
+    }
+
+    const usernameHasLetter = /[a-zA-Z]/.test(user);
+    const usernameHasNumber = /[0-9]/.test(user);
+
+    if (!usernameHasLetter || !usernameHasNumber) {
+      setUsernameError(
+        "❌ Username must contain at least 1 letter and 1 number",
+      );
+      setIsUsernameValid(false);
+      return false;
+    }
+
+    if (user.length > 20) {
+      setUsernameError("❌ Username must be 20 characters or less");
+      setIsUsernameValid(false);
+      return false;
+    }
+
+    setUsernameError("");
+    setIsUsernameValid(true);
+    return true;
+  };
+
+  // ADDED: Function to validate password inline (shows errors while typing)
+  const validatePassword = (pass: string) => {
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$/;
+
+    if (!pass) {
+      setPasswordError("");
+      setIsPasswordValid(false);
+      return false;
+    }
+
+    if (pass.length < 8) {
+      setPasswordError("❌ Password must be at least 8 characters");
+      setIsPasswordValid(false);
+      return false;
+    }
+
+    if (pass.length > 20) {
+      setPasswordError("❌ Password must be no more than 20 characters");
+      setIsPasswordValid(false);
+      return false;
+    }
+
+    if (!passwordRegex.test(pass)) {
+      setPasswordError(
+        "❌ Password must contain: 1 uppercase, 1 lowercase, 1 number, and 1 special character (@$!%*?&)",
+      );
+      setIsPasswordValid(false);
+      return false;
+    }
+
+    setPasswordError("");
+    setIsPasswordValid(true);
+    return true;
+  };
+
+  // ADDED: Function to validate confirm password inline
+  const validateConfirmPassword = (confirm: string) => {
+    if (!confirm) {
+      setConfirmPasswordError("");
+      return false;
+    }
+
+    if (confirm !== password) {
+      setConfirmPasswordError("❌ Passwords do not match");
+      return false;
+    }
+
+    setConfirmPasswordError("");
+    return true;
+  };
+
+  // Validation Functions (UPDATED: No popup alerts for password)
   const validatePersonalDetails = () => {
     const trimmedUniv = universityName.trim();
     const trimmedStudentId = studentId.trim();
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
-
-    if (
-      !trimmedUniv &&
-      !trimmedStudentId &&
-      !trimmedFirstName &&
-      !trimmedLastName &&
-      !sex &&
-      dobText === "Date of Birth" &&
-      !phoneNumber
-    ) {
-      Alert.alert("Incomplete Details", "Please fill in all personal details.");
-      return false;
-    }
 
     if (!trimmedUniv) {
       Alert.alert("Missing School Name", "Please input your school name.");
@@ -114,7 +204,7 @@ export default function StudentRegister() {
       return false;
     }
 
-    if (!phoneNumber || phoneNumber.length < 10) {
+    if (!phoneNumber || !isPhoneValid) {
       Alert.alert("Missing Phone Number", "Please enter a valid phone number.");
       return false;
     }
@@ -122,64 +212,41 @@ export default function StudentRegister() {
     return true;
   };
 
+  // UPDATED: Validate sign in details with inline errors (no popups)
   const validateSignInDetails = () => {
-    const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
-    const trimmedConfirm = confirmPassword.trim();
-
-    if (!trimmedUsername && !trimmedPassword && !trimmedConfirm) {
-      Alert.alert("Incomplete Details", "Please fill in all sign in details.");
-      return false;
-    }
-
-    if (!trimmedUsername) {
-      Alert.alert("Missing Username", "Please enter a Username.");
-      return false;
-    }
-
-    // Username validation: at least 1 letter, 1 number, max 20 characters
-    const usernameHasLetter = /[a-zA-Z]/.test(trimmedUsername);
-    const usernameHasNumber = /[0-9]/.test(trimmedUsername);
-
-    if (!usernameHasLetter || !usernameHasNumber) {
+    // Use inline validation results instead of popups
+    if (!isUsernameValid) {
       Alert.alert(
         "Invalid Username",
-        "Username must contain at least 1 letter and 1 number.",
+        "Please fix the username errors above before continuing.",
       );
       return false;
     }
 
-    if (trimmedUsername.length > 20) {
-      Alert.alert(
-        "Invalid Username",
-        "Username must be 20 characters or less.",
-      );
+    if (!username) {
+      Alert.alert("Missing Username", "Please enter a username.");
       return false;
     }
 
-    if (!trimmedPassword) {
-      Alert.alert("Missing Password", "Please enter a Password.");
-      return false;
-    }
-
-    // Password validation: 8+ chars, at least 1 uppercase, 1 lowercase, 1 number, 1 special character, max 20
-    const passwordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$/;
-
-    if (!passwordRegex.test(trimmedPassword)) {
+    if (!isPasswordValid) {
       Alert.alert(
         "Invalid Password",
-        "Password must be 8-20 characters and contain:\n• At least 1 capital letter\n• At least 1 small letter\n• At least 1 number\n• At least 1 special character (@$!%*?&)",
+        "Please fix the password errors above before continuing.",
       );
       return false;
     }
 
-    if (!trimmedConfirm) {
-      Alert.alert("Missing Confirmation", "Please confirm your Password.");
+    if (!password) {
+      Alert.alert("Missing Password", "Please enter a password.");
       return false;
     }
 
-    if (trimmedPassword !== trimmedConfirm) {
+    if (!confirmPassword) {
+      Alert.alert("Missing Confirmation", "Please confirm your password.");
+      return false;
+    }
+
+    if (confirmPassword !== password) {
       Alert.alert(
         "Password Mismatch",
         "The passwords you entered do not match.",
@@ -209,7 +276,7 @@ export default function StudentRegister() {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         tempEmail,
-        password.trim(),
+        password,
       );
       const userId = userCredential.user.uid;
 
@@ -225,7 +292,7 @@ export default function StudentRegister() {
           lastName: lastName.trim(),
           dateOfBirth: dobText,
           sex: sex,
-          phoneNumber: phoneNumber,
+          phoneNumber: phoneNumber, // Now stores clean +639XXXXXXXXX format
         },
         createdAt: new Date().toISOString(),
         userType: "student",
@@ -270,8 +337,8 @@ export default function StudentRegister() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1 }} 
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
     >
@@ -344,7 +411,7 @@ export default function StudentRegister() {
                 maxLength={50}
               />
 
-              {/* Calendar Picker */}
+              {/* Calendar Picker - FIXED */}
               <TouchableOpacity
                 style={styles.inputContainer}
                 onPress={() => setShowDatePicker(true)}
@@ -388,35 +455,20 @@ export default function StudentRegister() {
                 )}
               />
 
-              {/* Phone Input with Flag - MODIFIED */}
+              {/* Phone Input - UPDATED to use @sesamsolutions/phone-input */}
               <PhoneInput
-                ref={phoneInput}
-                defaultValue={phoneNumber}
-                defaultCode="PH"
-                layout="first"
-                onChangeFormattedText={(text) => setPhoneNumber(text)}
-                containerStyle={styles.phoneContainer}
-                textContainerStyle={styles.phoneTextContainer}
-                codeTextStyle={{
-                  color: "#0988EE",
-                  fontFamily: "Inter_400Regular",
+                initialCountry="PH"
+                onChange={(data) => {
+                  if (data.isValid) {
+                    setPhoneNumber(data.e164); // Returns +639XXXXXXXXX format
+                    setIsPhoneValid(true);
+                  } else {
+                    setIsPhoneValid(false);
+                  }
                 }}
-                textInputStyle={{
-                  color: "#0988EE",
-                  fontFamily: "Inter_400Regular",
-                  height: 45,
-                  textAlign: "left",
-                }}
-                textInputProps={{
-                  onFocus: () => {
-                    setTimeout(() => {
-                      scrollViewRef.current?.scrollTo({ 
-                        y: 650, 
-                        animated: true 
-                      });
-                    }, 100);
-                  },
-                }}
+                style={styles.phoneInputContainer}
+                textStyle={styles.phoneInputText}
+                flagStyle={styles.phoneFlag}
               />
 
               <TouchableOpacity
@@ -428,72 +480,126 @@ export default function StudentRegister() {
             </View>
           )}
 
-          {/* STEP 2: SIGN IN DETAILS */}
+          {/* STEP 2: SIGN IN DETAILS - UPDATED with inline validation for username */}
           {step === 2 && (
             <View style={styles.stepView}>
               <Text style={styles.title}>Sign In Details</Text>
               <Text style={styles.subTitle}>
-                Please enter your username and confirm password below to continue
+                Please enter your username and password below to continue
               </Text>
 
-              <TextInput
-                placeholder="Username"
-                placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                style={styles.input}
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                maxLength={20}
-              />
+              {/* Username Field with inline validation */}
+              <View style={styles.inputContainer}>
+                <TextInput
+                  placeholder="Username"
+                  placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                  style={styles.flexInput}
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(text);
+                    validateUsername(text);
+                  }}
+                  autoCapitalize="none"
+                  maxLength={20}
+                />
+                {isUsernameValid && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color="green"
+                    style={{ marginLeft: 8 }}
+                  />
+                )}
+              </View>
 
+              {/* Show username error message inline */}
+              {usernameError ? (
+                <Text style={styles.errorText}>{usernameError}</Text>
+              ) : isUsernameValid && username ? (
+                <Text style={styles.successText}>✓ Username is valid!</Text>
+              ) : null}
+
+              {/* Password Field with inline validation */}
               <View style={styles.inputContainer}>
                 <TextInput
                   placeholder="Password"
-                  secureTextEntry={!passwordVisible}
+                  secureTextEntry={!showPassword}
                   placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                  style={{
-                    flex: 1,
-                    color: "#0988EE",
-                    fontFamily: "Inter_400Regular",
-                  }}
+                  style={styles.flexInput}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    validatePassword(text);
+                    if (confirmPassword)
+                      validateConfirmPassword(confirmPassword);
+                  }}
                   maxLength={20}
                 />
                 <TouchableOpacity
-                  onPress={() => setPasswordVisible(!passwordVisible)}
+                  onPress={() => setShowPassword(!showPassword)}
                 >
                   <Ionicons
-                    name={passwordVisible ? "eye-outline" : "eye-off-outline"}
+                    name={showPassword ? "eye-outline" : "eye-off-outline"}
                     size={20}
                     color="rgba(9, 136, 238, 0.6)"
                   />
                 </TouchableOpacity>
               </View>
 
+              {/* Show password error message inline */}
+              {passwordError ? (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              ) : isPasswordValid && password ? (
+                <Text style={styles.successText}>
+                  ✓ Password meets all requirements!
+                </Text>
+              ) : null}
+
+              {/* Confirm Password Field with inline validation */}
               <View style={styles.inputContainer}>
                 <TextInput
                   placeholder="Confirm Password"
-                  secureTextEntry={!confirmVisible}
+                  secureTextEntry={!showConfirmPassword}
                   placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                  style={{
-                    flex: 1,
-                    color: "#0988EE",
-                    fontFamily: "Inter_400Regular",
-                  }}
+                  style={styles.flexInput}
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    validateConfirmPassword(text);
+                  }}
                 />
                 <TouchableOpacity
-                  onPress={() => setConfirmVisible(!confirmVisible)}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 >
                   <Ionicons
-                    name={confirmVisible ? "eye-outline" : "eye-off-outline"}
+                    name={
+                      showConfirmPassword ? "eye-outline" : "eye-off-outline"
+                    }
                     size={20}
                     color="rgba(9, 136, 238, 0.6)"
                   />
                 </TouchableOpacity>
+                {confirmPassword &&
+                  confirmPassword === password &&
+                  isPasswordValid && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="green"
+                      style={{ marginLeft: 8 }}
+                    />
+                  )}
               </View>
+
+              {/* Show confirm password error message inline */}
+              {confirmPasswordError ? (
+                <Text style={styles.errorText}>{confirmPasswordError}</Text>
+              ) : confirmPassword &&
+                confirmPassword === password &&
+                password &&
+                isPasswordValid ? (
+                <Text style={styles.successText}>✓ Passwords match!</Text>
+              ) : null}
 
               <TouchableOpacity
                 style={[styles.primaryButton, loading && styles.disabledButton]}
@@ -609,6 +715,11 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: "#FFF",
   },
+  flexInput: {
+    flex: 1,
+    color: "#0988EE",
+    fontFamily: "Inter_400Regular",
+  },
   dropdown: {
     height: 55,
     borderColor: "#0988EE",
@@ -629,20 +740,30 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
 
-  // --- PHONE INPUT SPECIAL STYLING ---
-  phoneContainer: {
+  // --- PHONE INPUT STYLES (UPDATED for @sesamsolutions/phone-input) ---
+  phoneInputContainer: {
     width: "100%",
     height: 55,
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#0988EE",
+    borderRadius: 12,
     marginBottom: 15,
     backgroundColor: "#FFF",
+    paddingHorizontal: 15,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  phoneTextContainer: {
-    backgroundColor: "#FFF",
-    paddingVertical: 0,
-    flex: 1,
+  phoneInputText: {
+    color: "#0988EE",
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    textAlignVertical: "center",
+    padding: 0,
+    margin: 0,
+  },
+  phoneFlag: {
+    width: 35,
+    height: 35,
   },
 
   // --- BUTTONS ---
@@ -684,5 +805,23 @@ const styles = StyleSheet.create({
   successImage: {
     width: "80%",
     height: "80%",
+  },
+
+  // --- INLINE FEEDBACK STYLES ---
+  errorText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#FF4D4D",
+    marginTop: -10,
+    marginBottom: 15,
+    marginLeft: 5,
+  },
+  successText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#28a745",
+    marginTop: -10,
+    marginBottom: 15,
+    marginLeft: 5,
   },
 });
