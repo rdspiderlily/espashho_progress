@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import PhoneInput from "@sesamsolutions/phone-input";
+import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import {
   EmailAuthProvider,
@@ -15,6 +17,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -44,6 +47,11 @@ export default function SpaceCustomerProfile() {
   const [sex, setSex] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isPhoneValid, setIsPhoneValid] = useState(false);
+
+  // Profile Picture States
+  const [profilePictureUri, setProfilePictureUri] = useState(null);
+  const [profilePictureModalVisible, setProfilePictureModalVisible] =
+    useState(false);
 
   // Password visibility states for the three password fields
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -143,6 +151,13 @@ export default function SpaceCustomerProfile() {
         setLastName(fetchedLastName);
         setUsername(fetchedUsername);
 
+        // Load profile picture
+        if (userData.profilePicture) {
+          setProfilePictureUri(userData.profilePicture);
+        } else {
+          setProfilePictureUri(null);
+        }
+
         // Validate the fetched username for display
         if (fetchedUsername) {
           const usernameHasLetter = /[a-zA-Z]/.test(fetchedUsername);
@@ -169,9 +184,9 @@ export default function SpaceCustomerProfile() {
         ) {
           fetchedDobText = personalDetails.dateOfBirth;
           setDobText(fetchedDobText);
-          
+
           // Parse the date correctly for the date picker
-          const dateParts = personalDetails.dateOfBirth.split('/');
+          const dateParts = personalDetails.dateOfBirth.split("/");
           if (dateParts.length === 3) {
             // Assuming format is MM/DD/YYYY or M/D/YYYY
             const month = parseInt(dateParts[0], 10) - 1; // Months are 0-indexed in JS
@@ -225,6 +240,108 @@ export default function SpaceCustomerProfile() {
       console.error("Error fetching user data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Function to save profile picture to local storage
+  const saveProfilePicture = async (uri: string) => {
+    if (!userId) return null;
+
+    try {
+      const fileName = `profile_${userId}.jpg`;
+      const newPath = `${FileSystem.documentDirectory}${fileName}`;
+
+      // Copy the image to app's local storage
+      await FileSystem.copyAsync({
+        from: uri,
+        to: newPath,
+      });
+
+      return newPath;
+    } catch (error) {
+      console.error("Error saving profile picture:", error);
+      return null;
+    }
+  };
+
+  // Function to delete profile picture
+  const deleteProfilePicture = async () => {
+    if (!userId) return;
+
+    try {
+      const fileName = `profile_${userId}.jpg`;
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+
+      // Check if file exists and delete it
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(filePath);
+      }
+
+      setProfilePictureUri(null);
+
+      // Update Firestore to remove profile picture reference
+      const userDocRef = doc(db, "users", userId);
+      await setDoc(userDocRef, { profilePicture: null }, { merge: true });
+
+      Alert.alert("Success", "Profile picture deleted successfully");
+    } catch (error) {
+      console.error("Error deleting profile picture:", error);
+      Alert.alert("Error", "Failed to delete profile picture");
+    }
+  };
+
+  // Function to update profile picture
+  const updateProfilePicture = async () => {
+    try {
+      // Request permission
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Needed",
+          "Please grant permission to access your photos",
+        );
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0].uri) {
+        const savedPath = await saveProfilePicture(result.assets[0].uri);
+        if (savedPath) {
+          setProfilePictureUri(savedPath);
+
+          // Update Firestore with profile picture path
+          const userDocRef = doc(db, "users", userId);
+          await setDoc(
+            userDocRef,
+            { profilePicture: savedPath },
+            { merge: true },
+          );
+
+          Alert.alert("Success", "Profile picture updated successfully");
+        }
+      }
+    } catch (error) {
+      console.error("Error updating profile picture:", error);
+      Alert.alert("Error", "Failed to update profile picture");
+    }
+  };
+
+  // Function to handle profile picture modal actions
+  const handleProfilePictureAction = (action: string) => {
+    setProfilePictureModalVisible(false);
+    if (action === "update") {
+      updateProfilePicture();
+    } else if (action === "delete") {
+      deleteProfilePicture();
     }
   };
 
@@ -625,10 +742,10 @@ export default function SpaceCustomerProfile() {
 
   return (
     <KeyboardAvoidingView
-  style={{ flex: 1 }}
-  behavior={Platform.OS === "ios" ? "padding" : undefined}
-  keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-  >
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
       <View style={styles.container}>
         <KeyboardAwareScrollView
           ref={scrollViewRef}
@@ -639,6 +756,22 @@ export default function SpaceCustomerProfile() {
           extraScrollHeight={100}
         >
           <Text style={styles.headerTitle}>Edit Profile</Text>
+
+          {/* Profile Picture Circle */}
+          <TouchableOpacity
+            style={styles.profileCircle}
+            onPress={() => setProfilePictureModalVisible(true)}
+          >
+            {profilePictureUri ? (
+              <Image
+                source={{ uri: profilePictureUri }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <Ionicons name="person" size={60} color="#0988EE" />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.profileText}>Tap to change profile picture</Text>
 
           <View style={styles.form}>
             <TextInput
@@ -934,6 +1067,45 @@ export default function SpaceCustomerProfile() {
           </View>
         </KeyboardAwareScrollView>
 
+        {/* Profile Picture Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={profilePictureModalVisible}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Ionicons name="camera-outline" size={60} color="#0988EE" />
+              <Text style={styles.modalTitle}>Profile Picture</Text>
+              <Text style={styles.modalSubTitle}>
+                Choose an option to update your profile picture
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.updatePhotoBtn]}
+                  onPress={() => handleProfilePictureAction("update")}
+                >
+                  <Text style={styles.confirmBtnText}>Update Photo</Text>
+                </TouchableOpacity>
+                {profilePictureUri && (
+                  <TouchableOpacity
+                    style={[styles.modalBtn, styles.deletePhotoBtn]}
+                    onPress={() => handleProfilePictureAction("delete")}
+                  >
+                    <Text style={styles.confirmBtnText}>Delete Photo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.cancelPhotoBtn]}
+                onPress={() => setProfilePictureModalVisible(false)}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         <Modal
           animationType="fade"
           transparent={true}
@@ -1020,6 +1192,29 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: "#042652",
     marginBottom: 40,
+  },
+  profileCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#FFF",
+    borderWidth: 3,
+    borderColor: "#0988EE",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  profileImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  profileText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "rgba(9, 136, 238, 0.8)",
+    marginBottom: 30,
   },
   form: {
     width: "100%",
@@ -1218,5 +1413,19 @@ const styles = StyleSheet.create({
   confirmBtnText: {
     color: "#FFF",
     fontFamily: "Inter_700Bold",
+  },
+  updatePhotoBtn: {
+    backgroundColor: "#0988EE",
+    flex: 0.45,
+  },
+  deletePhotoBtn: {
+    backgroundColor: "#FF4D4D",
+    flex: 0.45,
+  },
+  cancelPhotoBtn: {
+    borderWidth: 1,
+    borderColor: "#0988EE",
+    width: "100%",
+    marginTop: 10,
   },
 });
