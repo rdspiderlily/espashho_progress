@@ -123,12 +123,12 @@ export default function LoginScreen() {
   };
 
   const handleRegisterPress = () => {
-    // Reset login fields
-    setUsername("");
-    setPassword("");
-    // Navigate to registration
-    router.push("/registerOption");
-  };
+  // Reset login fields
+  setUsername("");
+  setPassword("");
+  // Navigate to Data Privacy first
+  router.push("./data-privacy");
+};
 
   return (
     <View style={styles.container}>
