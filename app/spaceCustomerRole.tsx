@@ -32,10 +32,10 @@ export default function SpaceCustomerRole() {
           </Text>
         </TouchableOpacity>
 
-        {/* Individual Option */}
+        {/* Individual Option - Now navigates to individualRegister */}
         <TouchableOpacity 
           style={styles.roleCard} 
-          onPress={() => alert("Individual Space Customer Registration Coming Soon!")}
+          onPress={() => router.push('/individualRegister')}
         >
           <Text style={styles.roleTitle}>I am an Individual</Text>
           <Text style={styles.roleDescription}>

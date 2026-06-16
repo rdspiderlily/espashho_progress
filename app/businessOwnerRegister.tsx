@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -22,35 +21,36 @@ import { auth, db } from "../firebaseConfig";
 
 const { width } = Dimensions.get("window");
 
-export default function StudentRegister() {
+export default function BusinessOwnerRegister() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // Steps: 1 (Permit), 2 (Business Info), 3 (Secure Account), 4 (Success)
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   const phoneInputRef = useRef<PhoneInput>(null);
 
-  // ID Upload State
-  const [idPhoto, setIdPhoto] = useState<string | null>(null);
+  // Step 1: Permit State
+  const [permitPhoto, setPermitPhoto] = useState<string | null>(null);
 
-  // Step 2 Personal Details States
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [dobText, setDobText] = useState("Date of Birth");
-  const [sex, setSex] = useState(null);
+  // Step 2: Business Info States
+  const [businessName, setBusinessName] = useState("");
+  const [permitNumber, setPermitNumber] = useState("");
+  const [businessType, setBusinessType] = useState(null);
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [contactPerson, setContactPerson] = useState("");
+  const [minimumPurchase, setMinimumPurchase] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isPhoneValid, setIsPhoneValid] = useState(false);
-  const [universityName, setUniversityName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
 
-  // Step 3 Sign In Details States
+  // Step 3: Secure Account States
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [personalEmail, setPersonalEmail] = useState(""); 
+  const [otp, setOtp] = useState(["", "", "", ""]);
+  
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Inline Validation States
+  // Validation UI Feedback States
   const [usernameError, setUsernameError] = useState("");
   const [isUsernameValid, setIsUsernameValid] = useState(false);
   const [passwordError, setPasswordError] = useState("");
@@ -59,24 +59,17 @@ export default function StudentRegister() {
 
   const [loading, setLoading] = useState(false);
 
-  const sexData = [
-    { label: "Male", value: "male" },
-    { label: "Female", value: "female" },
+  const businessTypeData = [
+    { label: "Coworking Space", value: "coworking" },
+    { label: "Study Lounge", value: "studylounge" },
+    { label: "Cafe / Coffee Shop", value: "cafe" },
+    { label: "Library Space", value: "library" },
   ];
 
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (Platform.OS === "android") {
-      if (event.type === "set" && selectedDate) {
-        setDate(selectedDate);
-        setDobText(selectedDate.toLocaleDateString());
-      }
-    } else {
-      if (selectedDate) {
-        setDate(selectedDate);
-        setDobText(selectedDate.toLocaleDateString());
-      }
-    }
+  const handleOtpChange = (text: string, index: number) => {
+    const updatedOtp = [...otp];
+    updatedOtp[index] = text.slice(-1);
+    setOtp(updatedOtp);
   };
 
   const validateUsername = (user: string) => {
@@ -144,119 +137,107 @@ export default function StudentRegister() {
     return true;
   };
 
-  const handleIdUploadPress = () => {
-    setIdPhoto("mock-uri-image-path-data");
+  const handlePermitUploadPress = () => {
+    setPermitPhoto("mock-permit-uri-data-link");
   };
 
-  const handleNextFromIdUpload = () => {
-    if (!idPhoto) {
-      Alert.alert(
-        "Upload Identification Document",
-        "Please upload a clear photo of the front of your Student ID to continue."
-      );
+  const handleNextFromPermit = () => {
+    if (!permitPhoto) {
+      Alert.alert("Almost There!", "Please upload a clear photo of your Business Permit to continue.");
       return;
     }
     setStep(2);
     scrollViewRef.current?.scrollToPosition?.(0, 0, false);
   };
 
-  const validatePersonalDetails = () => {
-    const trimmedUniv = universityName.trim();
-    const trimmedStudentId = studentId.trim();
-    const trimmedFirstName = firstName.trim();
-    const trimmedLastName = lastName.trim();
+  const validateBusinessDetails = () => {
+    const name = businessName.trim();
+    const permit = permitNumber.trim();
+    const email = businessEmail.trim();
+    const contact = contactPerson.trim();
+    const phone = phoneNumber.trim();
+    const isValidPhone = phone.length > 0 && phone.replace(/\D/g, "").length >= 10;
 
-    const phoneNumberTrimmed = phoneNumber.trim();
-    const isValidPhone = phoneNumberTrimmed.length > 0 && phoneNumberTrimmed.replace(/\D/g, '').length >= 10;
-
-    if (!trimmedUniv && !trimmedStudentId && !trimmedFirstName && !trimmedLastName && dobText === "Date of Birth" && !sex && !isValidPhone) {
-      Alert.alert(
-        "Let's Complete Your Profile",
-        "Please fill in your personal details below so we can set up your account."
-      );
+    if (!name && !permit && !businessType && !email && !contact && !minimumPurchase && !isValidPhone) {
+      Alert.alert("Let's Setup Your Business", "Please fill in your company information details below to proceed.");
       return false;
     }
 
     const missingFields = [];
-    if (!trimmedUniv) missingFields.push("University Name");
-    if (!trimmedStudentId) missingFields.push("Student ID Number");
-    if (!trimmedFirstName) missingFields.push("First Name");
-    if (!trimmedLastName) missingFields.push("Last Name");
-    if (dobText === "Date of Birth") missingFields.push("Date of Birth");
-    if (!sex) missingFields.push("Sex at Birth");
+    if (!name) missingFields.push("Business Name");
+    if (!permit) missingFields.push("Permit Number");
+    if (!businessType) missingFields.push("Business Type");
+    if (!email) missingFields.push("Business Email");
+    if (!contact) missingFields.push("Contact Person");
+    if (!minimumPurchase) missingFields.push("Minimum Purchase");
     if (!isValidPhone) missingFields.push("Phone Number");
 
     if (missingFields.length > 0) {
-      Alert.alert(
-        "Almost There!",
-        `Please provide the following remaining details to continue:\n\n• ${missingFields.join("\n• ")}`
-      );
+      Alert.alert("Almost There!", `Please fill out the following remaining items:\n\n• ${missingFields.join("\n• ")}`);
       return false;
     }
     return true;
   };
 
-  const validateSignInDetails = () => {
-    if (!username && !password && !confirmPassword) {
-      Alert.alert(
-        "Setup Account Details",
-        "Please choose a username and password to complete your registration."
-      );
+  const validateSecureAccountDetails = () => {
+    if (!username && !password && !confirmPassword && !personalEmail) {
+      Alert.alert("Complete Credentials", "Please set up your login options and email token verification fields.");
       return false;
     }
-    if (!isUsernameValid || !username) { 
-      Alert.alert("Check Username", "Please make sure your username follows the requirements."); 
-      return false; 
+    if (!isUsernameValid || !username) {
+      Alert.alert("Check Username", "Please make sure your unique username matches system syntax layouts.");
+      return false;
     }
-    if (!isPasswordValid || !password) { 
-      Alert.alert("Check Password", "Please make sure your password follows the security rules."); 
-      return false; 
+    if (!isPasswordValid || !password) {
+      Alert.alert("Check Password", "Please optimize password data parameters according to firewall requirements.");
+      return false;
     }
-    if (!confirmPassword || confirmPassword !== password) { 
-      Alert.alert("Password Mismatch", "The passwords you entered do not match. Please verify them."); 
-      return false; 
+    if (confirmPassword !== password) {
+      Alert.alert("Password Error", "The validation credentials written inside verification containers do not match.");
+      return false;
+    }
+    if (!personalEmail.trim() || !personalEmail.includes("@")) {
+      Alert.alert("Verification Email Required", "Please enter a valid personal email destination address to authorize verification.");
+      return false;
     }
     return true;
   };
 
   const handleConfirmDetails = () => {
-    if (validatePersonalDetails()) {
+    if (validateBusinessDetails()) {
       setStep(3);
       scrollViewRef.current?.scrollToPosition?.(0, 0, false);
     }
   };
 
   const handleCreateAccount = async () => {
-    if (!validateSignInDetails()) return;
+    if (!validateSecureAccountDetails()) return;
     setLoading(true);
 
-    // FIX: Use a valid email format - Firebase requires proper email
-    const email = `${username.trim().toLowerCase()}@espashho.com`;
-
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, personalEmail.trim(), password);
       const userId = userCredential.user.uid;
 
-      const userData = {
+      const businessData = {
         userId: userId,
         username: username.trim(),
-        email: email,
-        personalDetails: {
-          universityName: universityName.trim(),
-          studentId: studentId.trim(),
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          dateOfBirth: dobText,
-          sex: sex,
-          phoneNumber: phoneNumber,
-          idPhotoUri: idPhoto,
-        },
+        email: personalEmail.trim().toLowerCase(),
         createdAt: new Date().toISOString(),
-        userType: "student",
+        userType: "business_owner",
         isActive: true,
+        businessDetails: {
+          businessName: businessName.trim(),
+          permitNumber: permitNumber.trim(),
+          businessType: businessType,
+          businessEmail: businessEmail.trim().toLowerCase(),
+          contactPerson: contactPerson.trim(),
+          minimumPurchase: minimumPurchase.trim(),
+          phoneNumber: phoneNumber,
+          permitPhotoUri: permitPhoto,
+        },
       };
 
-      await setDoc(doc(db, "users", userId), userData);
+      await setDoc(doc(db, "users", userId), businessData);
       await setDoc(doc(db, "usernames", username.trim().toLowerCase()), {
         userId: userId,
         username: username.trim(),
@@ -264,40 +245,22 @@ export default function StudentRegister() {
 
       setStep(4);
     } catch (error: any) {
-      console.error("Registration error:", error);
+      console.error("Owner register breakdown:", error);
       let errorMessage = "Registration failed. Please try again.";
-      
-      // Better error handling
       if (error.code === "auth/email-already-in-use") {
-        errorMessage = "This username is already taken. Please choose a different username.";
-      } else if (error.code === "auth/invalid-email") {
-        errorMessage = "Invalid email format. Please try again.";
-      } else if (error.code === "auth/weak-password") {
-        errorMessage = "Password is too weak. Please choose a stronger password.";
-      } else if (error.code === "auth/network-request-failed") {
-        errorMessage = "Network error. Please check your internet connection.";
-      } else {
-        // Log the full error for debugging
-        console.error("Full error:", error);
-        errorMessage = `Registration failed: ${error.message || "Please try again."}`;
+        errorMessage = "This registration email profile is already attached to an active workspace owner configuration.";
       }
-      
-      Alert.alert("Registration Failed", errorMessage);
+      Alert.alert("Setup Blocked", errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Check if passwords match for display
   const doPasswordsMatch = confirmPassword.length > 0 && confirmPassword === password && isPasswordValid;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.container}>
-        {/* Top Segmented Progress Bar */}
         <View style={styles.progressBarBackground}>
           <View
             style={[
@@ -317,31 +280,22 @@ export default function StudentRegister() {
           extraScrollHeight={40}
         >
           {step < 4 && (
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => (step > 1 ? setStep(step - 1) : router.back())}
-            >
+            <TouchableOpacity style={styles.backButton} onPress={() => (step > 1 ? setStep(step - 1) : router.back())}>
               <Ionicons name="arrow-back" size={28} color="#042652" />
             </TouchableOpacity>
           )}
 
-          {/* STEP 1: UPLOAD ID */}
+          {/* STEP 1: UPLOAD PERMIT */}
           {step === 1 && (
             <View style={styles.stepView}>
-              <Text style={styles.title}>Upload your ID</Text>
-              <Text style={styles.subTitle}>
-                Please upload a clear photo of the front of your Student ID to continue.
-              </Text>
+              <Text style={styles.title}>Upload your Business Permit</Text>
+              <Text style={styles.subTitle}>Please upload a clear photo of your Business Permit to continue.</Text>
 
-              <TouchableOpacity 
-                style={styles.uploadCardContainer} 
-                onPress={handleIdUploadPress}
-                activeOpacity={0.8}
-              >
-                {idPhoto ? (
+              <TouchableOpacity style={styles.uploadCardContainer} onPress={handlePermitUploadPress} activeOpacity={0.8}>
+                {permitPhoto ? (
                   <View style={{ alignItems: "center" }}>
                     <Ionicons name="document-attach-outline" size={55} color="#0988EE" />
-                    <Text style={styles.uploadCardTextSuccess}>ID Attached Successfully!</Text>
+                    <Text style={styles.uploadCardTextSuccess}>Business Permit Attached!</Text>
                   </View>
                 ) : (
                   <View style={{ alignItems: "center" }}>
@@ -351,101 +305,75 @@ export default function StudentRegister() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.primaryButton} onPress={handleNextFromIdUpload}>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleNextFromPermit}>
                 <Text style={styles.buttonText}>Next</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* STEP 2: PERSONAL DETAILS - FIXED SPACING */}
+          {/* STEP 2: BUSINESS INFORMATION */}
           {step === 2 && (
             <View style={styles.stepView}>
-              <Text style={styles.title}>Personal Details</Text>
-              <Text style={styles.subTitle}>
-                Please enter your personal details below to continue
-              </Text>
+              <Text style={styles.title}>Business Information</Text>
+              <Text style={styles.subTitle}>Please complete each field. If anything is blank, enter it manually.</Text>
 
               <TextInput
-                placeholder="University Name"
+                placeholder="Business Name"
                 placeholderTextColor="rgba(9, 136, 238, 0.6)"
                 style={styles.input}
-                value={universityName}
-                onChangeText={setUniversityName}
-                maxLength={50}
+                value={businessName}
+                onChangeText={setBusinessName}
               />
+              
+              {/* FIXED: Changed onChangeText to call setPermitNumber with a capital N */}
               <TextInput
-                placeholder="Student ID Number"
+                placeholder="Permit Number"
                 placeholderTextColor="rgba(9, 136, 238, 0.6)"
                 style={styles.input}
-                keyboardType="numeric"
-                value={studentId}
-                onChangeText={setStudentId}
-                maxLength={50}
-              />
-              <TextInput
-                placeholder="First Name"
-                placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                style={styles.input}
-                value={firstName}
-                onChangeText={setFirstName}
-                maxLength={50}
-              />
-              <TextInput
-                placeholder="Last Name"
-                placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                style={styles.input}
-                value={lastName}
-                onChangeText={setLastName}
-                maxLength={50}
+                value={permitNumber}
+                onChangeText={setPermitNumber}
               />
 
-              {/* Date of Birth - with proper spacing */}
-              <View style={styles.inputWrapper}>
-                <TouchableOpacity
-                  style={styles.inputContainer}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Text
-                    style={{
-                      flex: 1,
-                      color: dobText === "Date of Birth" ? "rgba(9, 136, 238, 0.6)" : "#0988EE",
-                      fontFamily: "Inter_400Regular",
-                      fontSize: 16,
-                    }}
-                  >
-                    {dobText}
-                  </Text>
-                  <Ionicons name="calendar-outline" size={20} color="#0988EE" />
-                </TouchableOpacity>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={date}
-                    mode="date"
-                    display="default"
-                    onChange={onChangeDate}
-                  />
-                )}
-              </View>
-
-              {/* Sex at Birth - with proper spacing */}
               <View style={styles.inputWrapper}>
                 <Dropdown
                   style={styles.dropdown}
                   placeholderStyle={styles.placeholderStyle}
                   selectedTextStyle={styles.selectedTextStyle}
-                  data={sexData}
+                  data={businessTypeData}
                   labelField="label"
                   valueField="value"
-                  placeholder="Sex at Birth"
-                  value={sex}
-                  onChange={(item) => setSex(item.value)}
-                  renderRightIcon={() => (
-                    <Ionicons name="chevron-down" size={20} color="#0988EE" />
-                  )}
+                  placeholder="Business Type"
+                  value={businessType}
+                  onChange={(item) => setBusinessType(item.value)}
+                  renderRightIcon={() => <Ionicons name="chevron-down" size={20} color="#0988EE" />}
                 />
               </View>
 
-              {/* Phone Number */}
+              <TextInput
+                placeholder="Business Email"
+                placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={styles.input}
+                value={businessEmail}
+                onChangeText={setBusinessEmail}
+              />
+              <TextInput
+                placeholder="Contact Person"
+                placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                style={styles.input}
+                value={contactPerson}
+                onChangeText={setContactPerson}
+              />
+              <TextInput
+                placeholder="Minimum Purchase"
+                placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                keyboardType="numeric"
+                style={styles.input}
+                value={minimumPurchase}
+                onChangeText={setMinimumPurchase}
+              />
+
               <View style={styles.inputWrapper}>
                 <PhoneInput
                   ref={phoneInputRef}
@@ -470,15 +398,12 @@ export default function StudentRegister() {
             </View>
           )}
 
-          {/* STEP 3: SIGN IN DETAILS */}
+          {/* STEP 3: SECURE YOUR ACCOUNT WITH OTP */}
           {step === 3 && (
             <View style={styles.stepView}>
-              <Text style={styles.title}>Sign In Details</Text>
-              <Text style={styles.subTitle}>
-                Please enter your username and password below to continue
-              </Text>
+              <Text style={styles.title}>Secure Your Account</Text>
+              <Text style={styles.subTitle}>Complete this verification to ensure your account is secure and protected.</Text>
 
-              {/* Username Field */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput
@@ -494,21 +419,16 @@ export default function StudentRegister() {
                     maxLength={20}
                   />
                   {username.length > 0 && (
-                    <Ionicons 
-                      name={isUsernameValid ? "checkmark-circle" : "close-circle"} 
-                      size={22} 
-                      color={isUsernameValid ? "#00C851" : "#FF4D4D"} 
+                    <Ionicons
+                      name={isUsernameValid ? "checkmark-circle" : "close-circle"}
+                      size={22}
+                      color={isUsernameValid ? "#00C851" : "#FF4D4D"}
                     />
                   )}
                 </View>
-                {usernameError ? (
-                  <Text style={styles.errorText}>{usernameError}</Text>
-                ) : isUsernameValid && username ? (
-                  <Text style={styles.successText}>✓ Username is valid!</Text>
-                ) : null}
+                {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
               </View>
 
-              {/* Password Field */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput
@@ -520,31 +440,16 @@ export default function StudentRegister() {
                     onChangeText={(text) => {
                       setPassword(text);
                       validatePassword(text);
-                      if (confirmPassword) {
-                        validateConfirmPassword(confirmPassword);
-                      }
+                      if (confirmPassword) validateConfirmPassword(confirmPassword);
                     }}
-                    maxLength={20}
                   />
-                  <TouchableOpacity 
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.iconButton}
-                  >
-                    <Ionicons
-                      name={showPassword ? "eye-outline" : "eye-off-outline"}
-                      size={22}
-                      color="rgba(9, 136, 238, 0.6)"
-                    />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.iconButton}>
+                    <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={22} color="rgba(9, 136, 238, 0.6)" />
                   </TouchableOpacity>
                 </View>
-                {passwordError ? (
-                  <Text style={styles.errorText}>{passwordError}</Text>
-                ) : isPasswordValid && password ? (
-                  <Text style={styles.successText}>✓ Password meets all requirements!</Text>
-                ) : null}
+                {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
               </View>
 
-              {/* Confirm Password Field */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput
@@ -559,56 +464,65 @@ export default function StudentRegister() {
                     }}
                   />
                   <View style={styles.rightIconsContainer}>
-                    <TouchableOpacity 
-                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                      style={styles.iconButton}
-                    >
-                      <Ionicons
-                        name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
-                        size={22}
-                        color="rgba(9, 136, 238, 0.6)"
-                      />
+                    <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.iconButton}>
+                      <Ionicons name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} size={22} color="rgba(9, 136, 238, 0.6)" />
                     </TouchableOpacity>
                     {confirmPassword.length > 0 && (
-                      <Ionicons 
-                        name={doPasswordsMatch ? "checkmark-circle" : "close-circle"} 
-                        size={22} 
-                        color={doPasswordsMatch ? "#00C851" : "#FF4D4D"} 
-                      />
+                      <Ionicons name={doPasswordsMatch ? "checkmark-circle" : "close-circle"} size={22} color={doPasswordsMatch ? "#00C851" : "#FF4D4D"} />
                     )}
                   </View>
                 </View>
-                {confirmPasswordError ? (
-                  <Text style={styles.errorText}>{confirmPasswordError}</Text>
-                ) : doPasswordsMatch ? (
-                  <Text style={styles.successText}>✓ Passwords match!</Text>
-                ) : confirmPassword.length > 0 ? (
-                  <Text style={styles.errorText}>❌ Passwords do not match</Text>
-                ) : null}
+                {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
               </View>
 
-              <TouchableOpacity 
-                style={[styles.primaryButton, loading && styles.disabledButton]} 
-                onPress={handleCreateAccount}
-                disabled={loading}
-              >
-                <Text style={styles.buttonText}>{loading ? "Creating Account..." : "Create Account"}</Text>
+              <View style={styles.inputWrapper}>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="Email"
+                    placeholderTextColor="rgba(9, 136, 238, 0.6)"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    style={styles.flexInput}
+                    value={personalEmail}
+                    onChangeText={setPersonalEmail}
+                  />
+                  <TouchableOpacity activeOpacity={0.6}>
+                    <Text style={styles.sendInlineLinkText}>Send</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={styles.otpSectionHeading}>OTP</Text>
+              <View style={styles.otpRowContainer}>
+                {otp.map((digit, idx) => (
+                  <TextInput
+                    key={`owner-otp-${idx}`}
+                    style={styles.otpBoxField}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    value={digit}
+                    onChangeText={(text) => handleOtpChange(text, idx)}
+                  />
+                ))}
+              </View>
+
+              <TouchableOpacity style={styles.resendCodeButtonWrapper}>
+                <Text style={styles.resendCodeText}>Didn't receive code? Resend</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.primaryButton, loading && styles.disabledButton]} onPress={handleCreateAccount} disabled={loading}>
+                <Text style={styles.buttonText}>Create Account</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* STEP 4: REGISTRATION SUCCESSFUL */}
           {step === 4 && (
             <View style={[styles.stepView, { alignItems: "center", paddingTop: 40 }]}>
               <View style={styles.successIconWrapper}>
                 <Ionicons name="checkmark-circle" size={100} color="#00C851" />
               </View>
-              
               <Text style={styles.title}>Registration Successful!</Text>
-              <Text style={styles.subTitle}>
-                Welcome to Espashho! You can now sign in using your new credentials.
-              </Text>
-
+              <Text style={styles.subTitle}>Welcome to Espashho! You can now sign in using your new credentials.</Text>
               <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace("/")}>
                 <Text style={styles.buttonText}>Sign In Now</Text>
               </TouchableOpacity>
@@ -628,7 +542,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 30,
     paddingTop: 10,
-    paddingBottom: 75, 
+    paddingBottom: 75,
   },
   stepView: {
     marginTop: 20,
@@ -735,6 +649,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  sendInlineLinkText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 16,
+    color: "rgba(9, 136, 238, 0.6)",
+    paddingLeft: 10,
+  },
   dropdown: {
     height: 55,
     borderColor: "#0988EE",
@@ -783,6 +703,41 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 16,
   },
+  otpSectionHeading: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: "#042652",
+    marginBottom: 10,
+    marginTop: 5,
+  },
+  otpRowContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 15,
+  },
+  otpBoxField: {
+    width: width * 0.17,
+    height: 55,
+    borderWidth: 1,
+    borderColor: "#0988EE",
+    borderRadius: 12,
+    textAlign: "center",
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#042652",
+    backgroundColor: "#FFFFFF",
+  },
+  resendCodeButtonWrapper: {
+    alignSelf: "center",
+    marginBottom: 30,
+    padding: 4,
+  },
+  resendCodeText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    color: "#718096",
+  },
   primaryButton: {
     backgroundColor: "#0988EE",
     width: "100%",
@@ -790,7 +745,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 10,
     marginBottom: 10,
   },
   disabledButton: {

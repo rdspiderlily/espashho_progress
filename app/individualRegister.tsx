@@ -22,35 +22,27 @@ import { auth, db } from "../firebaseConfig";
 
 const { width } = Dimensions.get("window");
 
-export default function StudentRegister() {
+export default function IndividualRegister() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); 
   const scrollViewRef = useRef<KeyboardAwareScrollView>(null);
   const phoneInputRef = useRef<PhoneInput>(null);
 
-  // ID Upload State
-  const [idPhoto, setIdPhoto] = useState<string | null>(null);
-
-  // Step 2 Personal Details States
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dobText, setDobText] = useState("Date of Birth");
   const [sex, setSex] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isPhoneValid, setIsPhoneValid] = useState(false);
-  const [universityName, setUniversityName] = useState("");
-  const [studentId, setStudentId] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
-  // Step 3 Sign In Details States
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Inline Validation States
   const [usernameError, setUsernameError] = useState("");
   const [isUsernameValid, setIsUsernameValid] = useState(false);
   const [passwordError, setPasswordError] = useState("");
@@ -144,32 +136,13 @@ export default function StudentRegister() {
     return true;
   };
 
-  const handleIdUploadPress = () => {
-    setIdPhoto("mock-uri-image-path-data");
-  };
-
-  const handleNextFromIdUpload = () => {
-    if (!idPhoto) {
-      Alert.alert(
-        "Upload Identification Document",
-        "Please upload a clear photo of the front of your Student ID to continue."
-      );
-      return;
-    }
-    setStep(2);
-    scrollViewRef.current?.scrollToPosition?.(0, 0, false);
-  };
-
   const validatePersonalDetails = () => {
-    const trimmedUniv = universityName.trim();
-    const trimmedStudentId = studentId.trim();
     const trimmedFirstName = firstName.trim();
     const trimmedLastName = lastName.trim();
-
     const phoneNumberTrimmed = phoneNumber.trim();
     const isValidPhone = phoneNumberTrimmed.length > 0 && phoneNumberTrimmed.replace(/\D/g, '').length >= 10;
 
-    if (!trimmedUniv && !trimmedStudentId && !trimmedFirstName && !trimmedLastName && dobText === "Date of Birth" && !sex && !isValidPhone) {
+    if (!trimmedFirstName && !trimmedLastName && dobText === "Date of Birth" && !sex && !isValidPhone) {
       Alert.alert(
         "Let's Complete Your Profile",
         "Please fill in your personal details below so we can set up your account."
@@ -178,8 +151,6 @@ export default function StudentRegister() {
     }
 
     const missingFields = [];
-    if (!trimmedUniv) missingFields.push("University Name");
-    if (!trimmedStudentId) missingFields.push("Student ID Number");
     if (!trimmedFirstName) missingFields.push("First Name");
     if (!trimmedLastName) missingFields.push("Last Name");
     if (dobText === "Date of Birth") missingFields.push("Date of Birth");
@@ -221,8 +192,8 @@ export default function StudentRegister() {
 
   const handleConfirmDetails = () => {
     if (validatePersonalDetails()) {
-      setStep(3);
-      scrollViewRef.current?.scrollToPosition?.(0, 0, false);
+      setStep(2);
+      scrollViewRef.current?.scrollToPosition(0, 0, false);
     }
   };
 
@@ -230,8 +201,8 @@ export default function StudentRegister() {
     if (!validateSignInDetails()) return;
     setLoading(true);
 
-    // FIX: Use a valid email format - Firebase requires proper email
-    const email = `${username.trim().toLowerCase()}@espashho.com`;
+    const sanitizedUsername = username.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const email = `${sanitizedUsername}@espashho.com`;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -242,17 +213,14 @@ export default function StudentRegister() {
         username: username.trim(),
         email: email,
         personalDetails: {
-          universityName: universityName.trim(),
-          studentId: studentId.trim(),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           dateOfBirth: dobText,
           sex: sex,
           phoneNumber: phoneNumber,
-          idPhotoUri: idPhoto,
         },
         createdAt: new Date().toISOString(),
-        userType: "student",
+        userType: "individual", 
         isActive: true,
       };
 
@@ -262,24 +230,18 @@ export default function StudentRegister() {
         username: username.trim(),
       });
 
-      setStep(4);
+      setStep(3);
     } catch (error: any) {
-      console.error("Registration error:", error);
       let errorMessage = "Registration failed. Please try again.";
       
-      // Better error handling
       if (error.code === "auth/email-already-in-use") {
         errorMessage = "This username is already taken. Please choose a different username.";
       } else if (error.code === "auth/invalid-email") {
-        errorMessage = "Invalid email format. Please try again.";
+        errorMessage = "Invalid username configuration template format.";
       } else if (error.code === "auth/weak-password") {
         errorMessage = "Password is too weak. Please choose a stronger password.";
       } else if (error.code === "auth/network-request-failed") {
         errorMessage = "Network error. Please check your internet connection.";
-      } else {
-        // Log the full error for debugging
-        console.error("Full error:", error);
-        errorMessage = `Registration failed: ${error.message || "Please try again."}`;
       }
       
       Alert.alert("Registration Failed", errorMessage);
@@ -288,7 +250,6 @@ export default function StudentRegister() {
     }
   };
 
-  // Check if passwords match for display
   const doPasswordsMatch = confirmPassword.length > 0 && confirmPassword === password && isPasswordValid;
 
   return (
@@ -297,12 +258,11 @@ export default function StudentRegister() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.container}>
-        {/* Top Segmented Progress Bar */}
         <View style={styles.progressBarBackground}>
           <View
             style={[
               styles.progressBarFill,
-              { width: step === 1 ? "25%" : step === 2 ? "50%" : step === 3 ? "75%" : "100%" },
+              { width: step === 1 ? "33.3%" : step === 2 ? "66.6%" : "100%" },
             ]}
           />
         </View>
@@ -316,7 +276,7 @@ export default function StudentRegister() {
           enableOnAndroid={true}
           extraScrollHeight={40}
         >
-          {step < 4 && (
+          {step < 3 && (
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => (step > 1 ? setStep(step - 1) : router.back())}
@@ -325,63 +285,13 @@ export default function StudentRegister() {
             </TouchableOpacity>
           )}
 
-          {/* STEP 1: UPLOAD ID */}
           {step === 1 && (
-            <View style={styles.stepView}>
-              <Text style={styles.title}>Upload your ID</Text>
-              <Text style={styles.subTitle}>
-                Please upload a clear photo of the front of your Student ID to continue.
-              </Text>
-
-              <TouchableOpacity 
-                style={styles.uploadCardContainer} 
-                onPress={handleIdUploadPress}
-                activeOpacity={0.8}
-              >
-                {idPhoto ? (
-                  <View style={{ alignItems: "center" }}>
-                    <Ionicons name="document-attach-outline" size={55} color="#0988EE" />
-                    <Text style={styles.uploadCardTextSuccess}>ID Attached Successfully!</Text>
-                  </View>
-                ) : (
-                  <View style={{ alignItems: "center" }}>
-                    <Ionicons name="cloud-upload-outline" size={55} color="#0988EE" />
-                    <Text style={styles.uploadCardText}>Tap to browse or take photo</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.primaryButton} onPress={handleNextFromIdUpload}>
-                <Text style={styles.buttonText}>Next</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* STEP 2: PERSONAL DETAILS - FIXED SPACING */}
-          {step === 2 && (
             <View style={styles.stepView}>
               <Text style={styles.title}>Personal Details</Text>
               <Text style={styles.subTitle}>
                 Please enter your personal details below to continue
               </Text>
 
-              <TextInput
-                placeholder="University Name"
-                placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                style={styles.input}
-                value={universityName}
-                onChangeText={setUniversityName}
-                maxLength={50}
-              />
-              <TextInput
-                placeholder="Student ID Number"
-                placeholderTextColor="rgba(9, 136, 238, 0.6)"
-                style={styles.input}
-                keyboardType="numeric"
-                value={studentId}
-                onChangeText={setStudentId}
-                maxLength={50}
-              />
               <TextInput
                 placeholder="First Name"
                 placeholderTextColor="rgba(9, 136, 238, 0.6)"
@@ -399,7 +309,6 @@ export default function StudentRegister() {
                 maxLength={50}
               />
 
-              {/* Date of Birth - with proper spacing */}
               <View style={styles.inputWrapper}>
                 <TouchableOpacity
                   style={styles.inputContainer}
@@ -427,7 +336,6 @@ export default function StudentRegister() {
                 )}
               </View>
 
-              {/* Sex at Birth - with proper spacing */}
               <View style={styles.inputWrapper}>
                 <Dropdown
                   style={styles.dropdown}
@@ -445,7 +353,6 @@ export default function StudentRegister() {
                 />
               </View>
 
-              {/* Phone Number */}
               <View style={styles.inputWrapper}>
                 <PhoneInput
                   ref={phoneInputRef}
@@ -470,15 +377,13 @@ export default function StudentRegister() {
             </View>
           )}
 
-          {/* STEP 3: SIGN IN DETAILS */}
-          {step === 3 && (
+          {step === 2 && (
             <View style={styles.stepView}>
               <Text style={styles.title}>Sign In Details</Text>
               <Text style={styles.subTitle}>
                 Please enter your username and password below to continue
               </Text>
 
-              {/* Username Field */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput
@@ -508,7 +413,6 @@ export default function StudentRegister() {
                 ) : null}
               </View>
 
-              {/* Password Field */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput
@@ -544,7 +448,6 @@ export default function StudentRegister() {
                 ) : null}
               </View>
 
-              {/* Confirm Password Field */}
               <View style={styles.inputWrapper}>
                 <View style={styles.inputContainer}>
                   <TextInput
@@ -592,13 +495,14 @@ export default function StudentRegister() {
                 onPress={handleCreateAccount}
                 disabled={loading}
               >
-                <Text style={styles.buttonText}>{loading ? "Creating Account..." : "Create Account"}</Text>
+                <Text style={styles.buttonText}>
+                  {loading ? "Creating Account..." : "Create Account"}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* STEP 4: REGISTRATION SUCCESSFUL */}
-          {step === 4 && (
+          {step === 3 && (
             <View style={[styles.stepView, { alignItems: "center", paddingTop: 40 }]}>
               <View style={styles.successIconWrapper}>
                 <Ionicons name="checkmark-circle" size={100} color="#00C851" />
@@ -665,34 +569,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 35,
     paddingHorizontal: 10,
-  },
-  uploadCardContainer: {
-    width: "100%",
-    aspectRatio: 1.25,
-    borderWidth: 2,
-    borderColor: "#0988EE",
-    borderStyle: "dashed",
-    borderRadius: 16,
-    backgroundColor: "#F8FAFC",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 40,
-    padding: 20,
-  },
-  uploadCardText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 15,
-    color: "rgba(4, 38, 82, 0.6)",
-    marginTop: 12,
-    textAlign: "center",
-  },
-  uploadCardTextSuccess: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
-    color: "#00C851",
-    marginTop: 12,
-    textAlign: "center",
   },
   input: {
     height: 55,
