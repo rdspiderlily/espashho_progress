@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, Dimensions } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { useEffect, useState } from 'react';
+import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 
 // Font Imports
-import { 
-  useFonts, 
-  Inter_400Regular, 
-  Inter_700Bold 
+import {
+  Inter_400Regular,
+  Inter_700Bold,
+  useFonts
 } from '@expo-google-fonts/inter';
-import { 
-  Montserrat_800ExtraBold 
+import {
+  Montserrat_800ExtraBold
 } from '@expo-google-fonts/montserrat';
 
 // Prevent the native splash screen from auto-hiding
@@ -85,6 +85,19 @@ export default function RootLayout() {
       <Stack.Screen name="spaceCustomerRole" />
       <Stack.Screen name="studentRegister" />
       <Stack.Screen name="spaceCustomerProfile" />
+      
+      {/* Data Privacy & Terms */}
+      <Stack.Screen name="data-privacy" />
+      <Stack.Screen name="terms-and-conditions" />
+      
+      {/* Business Owner Screens */}
+      <Stack.Screen name="businessOwnerRegister" />
+      <Stack.Screen name="businessHome" />        
+      <Stack.Screen name="businessDiscover" />  
+      
+      {/* Other Screens */}
+      <Stack.Screen name="forgotPassword" />
+      <Stack.Screen name="individualRegister" />
     </Stack>
   );
 }
@@ -92,7 +105,7 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   splashContainer: {
     flex: 1,
-    backgroundColor: '#F0F7FF', // Your specific splash background
+    backgroundColor: '#F0F7FF',
     alignItems: 'center',
     justifyContent: 'center',
   },

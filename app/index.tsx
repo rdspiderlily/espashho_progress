@@ -114,7 +114,15 @@ export default function LoginScreen() {
       await signInWithEmailAndPassword(auth, userEmail, trimmedPassword);
 
       setLoading(false);
-      router.replace("/spaceCustomerProfile");
+
+      // Step 5: Get user type and route accordingly
+      const userType = userDoc.data().userType; // "business" or "customer"
+
+      if (userType === "business_owner") {
+        router.replace("/businessHome");
+      } else {
+        router.replace("/spaceCustomerProfile");
+      }
     } catch (error: any) {
       setLoading(false);
       const message = getFriendlyErrorMessage(error.code);
@@ -123,12 +131,12 @@ export default function LoginScreen() {
   };
 
   const handleRegisterPress = () => {
-  // Reset login fields
-  setUsername("");
-  setPassword("");
-  // Navigate to Data Privacy first
-  router.push("./data-privacy");
-};
+    // Reset login fields
+    setUsername("");
+    setPassword("");
+    // Navigate to Data Privacy first
+    router.push("./data-privacy");
+  };
 
   return (
     <View style={styles.container}>
@@ -175,10 +183,11 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.forgotBtn} 
-      onPress={() => router.push("/forgotPassword")}
+      <TouchableOpacity
+        style={styles.forgotBtn}
+        onPress={() => router.push("/forgotPassword")}
       >
-      <Text style={styles.forgotText}>Forgot Password?</Text>
+        <Text style={styles.forgotText}>Forgot Password?</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
